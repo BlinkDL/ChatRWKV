@@ -28,9 +28,8 @@ if CHAT_LANG == 'English':
     # args.ctx_len = 1024
 
 elif CHAT_LANG == 'Chinese':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test3-20230112-260'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run3z/rwkv-346'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-125'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test3-20230114-260'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-150'
     args.n_layer = 32
     args.n_embd = 4096
     args.ctx_len = 1024
@@ -260,6 +259,7 @@ def on_message(message):
             new = '\n' + msg[5:].strip()
             # print(f'### prompt ###\n[{new}]')
             current_state = None
+            model_tokens = []
             out = run_rnn(tokenizer.tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
@@ -267,6 +267,7 @@ def on_message(message):
             new = '\nQ: ' + msg[4:].strip() + '\nA:'
             # print(f'### prompt ###\n[{new}]')
             current_state = None
+            model_tokens = []
             out = run_rnn(tokenizer.tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
