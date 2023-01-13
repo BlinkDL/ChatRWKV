@@ -33,9 +33,6 @@ class RWKV_RNN(nn.Module):
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
             # refine weights and send to correct device
             keys = list(w.keys())
-            if 'pos_emb_x' in keys:
-                w['pos_emb'] = (w['pos_emb_x'] + w['pos_emb_y']).reshape(args.ctx_len+1, -1)[:-1,:]
-            keys = list(w.keys())
             print_need_newline = False
             for x in keys:
                 block_id = 0

@@ -4,10 +4,10 @@
 import os, copy, types, gc, sys
 
 args = types.SimpleNamespace()
-args.RUN_DEVICE = "cuda"  # 'cpu' (already very fast) // 'cuda'
-args.FLOAT_MODE = "fp16" # fp32 (good for CPU) // fp16 (good for GPU)
+args.RUN_DEVICE = "cuda"  # 'cuda' // 'cpu'
+args.FLOAT_MODE = "fp16" # fp16 (good for GPU) // fp32 (good for CPU)
 
-# Please download model from https://huggingface.co/BlinkDL
+# Download model from https://huggingface.co/BlinkDL
 
 CHAT_LANG = 'English' # English Chinese (more to come)
 
@@ -181,7 +181,7 @@ def run_rnn(tokens, newline_adj = 0):
     # print(f'### model ###\n[{tokenizer.tokenizer.decode(model_tokens)}]')
 
     out[0] = -999999999  # disable <|endoftext|>
-    out[187] += newline_adj
+    out[187] += newline_adj # adjust \n probability
     # if newline_adj > 0:
     #     out[15] += newline_adj / 2 # '.'
     return out
@@ -280,12 +280,6 @@ def on_message(message):
             out = run_rnn(tokenizer.tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
-            # new = f"\nThe following is an excellent Q&A session consists of detailed and factual information.\n\nQ: What is 3+5?\nA: The answer is 8.\n\nQ: {msg[9:].strip()}\nA:"
-            # print(f'### prompt ###\n[{new}]')
-            # current_state = None
-            # out = run_rnn(tokenizer.tokenizer.encode(new))
-            # save_all_stat(srv, 'gen_0', out)
-
         elif msg.lower() == '+++':
             try:
                 out = load_all_stat(srv, 'gen_1')
@@ -316,7 +310,7 @@ def on_message(message):
                 out = run_rnn([token])
             
             xxx = tokenizer.tokenizer.decode(model_tokens[out_last:])
-            if '\ufffd' not in xxx:
+            if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
                 if i >= FREE_GEN_LEN:
@@ -363,7 +357,7 @@ def on_message(message):
             out = run_rnn([token], newline_adj=newline_adj)
 
             xxx = tokenizer.tokenizer.decode(model_tokens[out_last:])
-            if '\ufffd' not in xxx:
+            if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
             
