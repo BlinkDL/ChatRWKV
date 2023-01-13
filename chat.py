@@ -28,7 +28,9 @@ if CHAT_LANG == 'English':
     # args.ctx_len = 1024
 
 elif CHAT_LANG == 'Chinese':
-    args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run3z/rwkv-304'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test2-20230112-150'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run3z/rwkv-327'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-95'
     args.n_layer = 32
     args.n_embd = 4096
     args.ctx_len = 1024
@@ -131,11 +133,13 @@ A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西�
 直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
 + --> 让机器人换个回答
 +reset --> 重置对话
+目前尚未加入“重复惩罚”，所以机器人容易生成重复内容，请使用 + 将它的回答换成正常内容。
 
 +gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
 +qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
-+++ --> 继续 +gen / +qa 的回答
-++ --> 换个 +gen / +qa 的回答
++qq 某某问题 --> 问独立的问题（忽略上下文），且敞开想象力，用\\n代表换行
++++ --> 继续 +gen / +qa / +qq 的回答
+++ --> 换个 +gen / +qa / +qq 的回答
 
 现在可以输入内容和机器人聊天（注意它不大懂中文，它可能更懂英文）。请经常使用 +reset 重置机器人记忆。
 '''
@@ -239,10 +243,17 @@ def on_message(message):
         reply_msg("Chat reset.")
         return
 
-    elif msg[:5].lower() == '+gen ' or msg[:4].lower() == '+qa ' or msg.lower() == '+++' or msg.lower() == '++':
+    elif msg[:5].lower() == '+gen ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
         if msg[:5].lower() == '+gen ':
             new = '\n' + msg[5:].strip()
+            # print(f'### prompt ###\n[{new}]')
+            current_state = None
+            out = run_rnn(tokenizer.tokenizer.encode(new))
+            save_all_stat(srv, 'gen_0', out)
+
+        elif msg[:4].lower() == '+qq ':
+            new = '\nQ: ' + msg[4:].strip() + '\nA:'
             # print(f'### prompt ###\n[{new}]')
             current_state = None
             out = run_rnn(tokenizer.tokenizer.encode(new))
