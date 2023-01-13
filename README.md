@@ -29,7 +29,8 @@ Chat example from a user:
 +qq 请以《我的驴》为题写一篇作文
 +qq 请以《企鹅》为题写一首诗歌
 
-+gen 二向箔是一种
-+gen 我抬头一看，
++gen 二向箔是一种超级武器，它的原理是
++gen 我抬头一看，竟然是
++gen 创业思路：\n1.
 +gen import torch
 ```
