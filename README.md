@@ -14,11 +14,23 @@ Chat example from a user:
 
 ## 中文模型
 
-在 https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main 下载双语模型（EngChn），在 chat.py 修改 CHAT_LANG 为 Chinese，修改 MODEL_NAME 为你下载的模型路径。
+QQ群 143626394（加入时请简单自我介绍）。
 
-目前 7B 模型需要 14G 显存（或者用 cpu 模式，慢很多），可以优化，但是现在忙。QQ群 143626394（加入时请简单自我介绍）。
+在 chat.py 修改 CHAT_LANG 为 Chinese，修改 MODEL_NAME 为你下载的模型路径。
 
-试试这些：
+必须下载双语模型（EngChn），选日期最新的。
+
+大模型：7B 参数，需要 14G 显存，效果好：
+https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main 可以优化显存占用和速度，但是现在忙。
+
+小模型：1.5B 参数 ，需要 3G 显存，效果差：
+https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
+
+中模型：3B 参数，需要 6G 显存，正在训练。
+
+如果没显卡，或者显存不够，可以用 cpu 模式（很慢）。
+
+试试这些指令：
 ```
 +qa 奶茶好喝吗？
 +qa 猫喜欢做什么？
