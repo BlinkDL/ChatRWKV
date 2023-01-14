@@ -5,7 +5,7 @@ import os, copy, types, gc, sys
 
 args = types.SimpleNamespace()
 args.RUN_DEVICE = "cuda"  # 'cuda' // 'cpu'
-args.FLOAT_MODE = "fp16" # fp16 (good for GPU) // fp32 (good for CPU)
+args.FLOAT_MODE = "fp16" # fp16 (good for GPU, not for CPU) // fp32 (good for CPU) // bf16 (worse accuracy, but available for CPU)
 
 # Download model from https://huggingface.co/BlinkDL
 
@@ -29,7 +29,7 @@ if CHAT_LANG == 'English':
 
 elif CHAT_LANG == 'Chinese':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test3-20230114-260'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-150'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-230'
     args.n_layer = 32
     args.n_embd = 4096
     args.ctx_len = 1024
@@ -40,7 +40,7 @@ elif CHAT_LANG == 'Chinese':
     # args.ctx_len = 1024
 
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-test3-20230112-260'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-125'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-400'
     # args.n_layer = 24
     # args.n_embd = 2048
     # args.ctx_len = 1024
@@ -51,6 +51,8 @@ FREE_GEN_LEN = 150
 
 GEN_TEMP = 1.0
 GEN_TOP_P = 0.85
+
+AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
@@ -143,7 +145,6 @@ A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西�
 直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
 + --> 让机器人换个回答
 +reset --> 重置对话
-目前尚未加入“重复惩罚”，所以机器人容易生成重复内容，请使用 + 将它的回答换成正常内容。
 
 +gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
 +qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
@@ -152,6 +153,7 @@ A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西�
 ++ --> 换个 +gen / +qa / +qq 的回答
 
 现在可以输入内容和机器人聊天（注意它不大懂中文，它可能更懂英文）。请经常使用 +reset 重置机器人记忆。
+目前没有“重复惩罚”，所以机器人容易重复。必须使用 + 将它的回答换成正常内容，否则后续对话都会被污染。
 '''
 
 # Load Model
@@ -165,6 +167,12 @@ model = RWKV_RNN(args)
 model_tokens = []
 
 current_state = None
+
+AVOID_REPEAT_TOKENS = []
+for i in AVOID_REPEAT:
+    dd = tokenizer.tokenizer.encode(i)
+    assert len(dd) == 1
+    AVOID_REPEAT_TOKENS += dd
 
 ########################################################################################################
 
@@ -183,6 +191,8 @@ def run_rnn(tokens, newline_adj = 0):
     out[187] += newline_adj # adjust \n probability
     # if newline_adj > 0:
     #     out[15] += newline_adj / 2 # '.'
+    if model_tokens[-1] in AVOID_REPEAT_TOKENS:
+        out[model_tokens[-1]] = -999999999
     return out
 
 all_state = {}
