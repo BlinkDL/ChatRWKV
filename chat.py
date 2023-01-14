@@ -13,41 +13,34 @@ CHAT_LANG = 'English' # English Chinese (more to come)
 
 if CHAT_LANG == 'English':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230108-5170'
-    args.n_layer = 40
-    args.n_embd = 5120
-    args.ctx_len = 1024
-
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221115-8047'
-    # args.n_layer = 32
-    # args.n_embd = 4096
-    # args.ctx_len = 1024
-
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
-    # args.n_layer = 32
-    # args.n_embd = 2560
-    # args.ctx_len = 1024
 
 elif CHAT_LANG == 'Chinese':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test3-20230114-260'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-230'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-test3-20230114'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-test4-20230115'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-265'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-415'
+
+if '-1B5-' in args.MODEL_NAME or '/1.5-' in args.MODEL_NAME:
+    args.n_layer = 24
+    args.n_embd = 2048
+elif '-3B-' in args.MODEL_NAME or '/3-' in args.MODEL_NAME:
+    args.n_layer = 32
+    args.n_embd = 2560
+elif '-7B-' in args.MODEL_NAME or '/7-' in args.MODEL_NAME:
     args.n_layer = 32
     args.n_embd = 4096
-    args.ctx_len = 1024
+elif '-14B-' in args.MODEL_NAME or '/14-' in args.MODEL_NAME:
+    args.n_layer = 40
+    args.n_embd = 5120
 
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/3-run1z/rwkv-5'
-    # args.n_layer = 32
-    # args.n_embd = 2560
-    # args.ctx_len = 1024
+args.ctx_len = 1024
 
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-test3-20230112-260'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-400'
-    # args.n_layer = 24
-    # args.n_embd = 2048
-    # args.ctx_len = 1024
-
-CHAT_LEN_SHORT = 30
-CHAT_LEN_LONG = 130
-FREE_GEN_LEN = 150
+CHAT_LEN_SHORT = 40
+CHAT_LEN_LONG = 150
+FREE_GEN_LEN = 200
 
 GEN_TEMP = 1.0
 GEN_TOP_P = 0.85
@@ -142,6 +135,7 @@ A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西�
 
 '''
     HELP_MSG = '''指令:
+
 直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
 + --> 让机器人换个回答
 +reset --> 重置对话
@@ -153,7 +147,8 @@ A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西�
 ++ --> 换个 +gen / +qa / +qq 的回答
 
 现在可以输入内容和机器人聊天（注意它不大懂中文，它可能更懂英文）。请经常使用 +reset 重置机器人记忆。
-目前没有“重复惩罚”，所以机器人容易重复。必须使用 + 将它的回答换成正常内容，否则后续对话都会被污染。
+目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
+注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
 '''
 
 # Load Model
@@ -315,8 +310,8 @@ def on_message(message):
                 top_p_usual=x_top_p,
                 top_p_newline=x_top_p,
             )
-            if msg[:4].lower() == '+qa ':
-                out = run_rnn([token], newline_adj=-1)
+            if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
+                out = run_rnn([token], newline_adj=-2)
             else:
                 out = run_rnn([token])
             
