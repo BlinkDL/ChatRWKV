@@ -20,13 +20,14 @@ QQ群 143626394（加入时请简单自我介绍）。
 
 必须下载双语模型（EngChn），选日期最新的。
 
-大模型：7B 参数，需要 14G 显存，效果好：
-https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main 可以优化显存占用和速度，但是现在忙。
+大模型：7B 参数，需 14G 显存，效果好（以后可以优化显存占用和速度，但现在忙）：
+https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main
 
-小模型：1.5B 参数 ，需要 3G 显存，效果差：
+中模型：3B 参数，需 6G 显存，效果中等：
+https://huggingface.co/BlinkDL/rwkv-4-pile-3b/tree/main
+
+小模型：1.5B 参数 ，需 3G 显存，效果差些：
 https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
-
-中模型：3B 参数，需要 6G 显存，正在训练。
 
 如果没显卡，或者显存不够，可以用 cpu 模式（很慢）。
 
