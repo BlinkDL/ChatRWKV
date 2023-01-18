@@ -1,5 +1,5 @@
 # ChatRWKV
-ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model.
+ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM.
 
 It is not instruct-tuned for conversation yet, so don't expect good quality. But it's already fun.
 
