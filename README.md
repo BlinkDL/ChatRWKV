@@ -9,6 +9,8 @@ It is not instruct-tuned for conversation yet, so don't expect good quality. But
 
 **RWKV Discord:** https://discord.gg/bDSBUMeFpc
 
+![RWKV-eval](RWKV-eval.png)
+
 Chat example from a user:
 ![ChatRWKV](ChatRWKV.png)
 
