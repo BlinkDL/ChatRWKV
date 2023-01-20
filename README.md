@@ -1,8 +1,6 @@
 # ChatRWKV
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM.
 
-It is not instruct-tuned for conversation yet, so don't expect good quality. But it's already fun.
-
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL
 
 **RWKV LM:** https://github.com/BlinkDL/RWKV-LM
@@ -10,6 +8,50 @@ It is not instruct-tuned for conversation yet, so don't expect good quality. But
 **RWKV Discord:** https://discord.gg/bDSBUMeFpc
 
 ![RWKV-eval](RWKV-eval.png)
+
+It is not instruct-tuned for conversation yet, so don't directly ask it to do stuffs (unless it's a simple question).
+
+Long answer:
+
+```+gen Here is a short story in which Jeff Bezos, Elon Musk, and Bill Gates fight in a tournament:```
+
+```+gen Here is a Python function that generates string of words that would confuse LLMs:```
+
+```
++gen List of penguin facts:
+
+1.
+```
+
+```
++gen Q: Can penguins fly?
+
+A: Here is a long answer. Firstly,
+```
+
+```
++gen Q: Can penguins fly?
+
+A: Here is some research. Firstly,
+```
+
+```
++gen Q: Can penguins fly?
+
+A: Yes, and let me explain why. Firstly,
+```
+
+Short answer: 
+
+```+qa Can penguins fly?```
+
+Prompt magic:
+
+```+gen $ curl -i https://google.com/```
+
+```+gen The following is the contents of https://en.wikipedia.org/wiki/Internet:```
+
+```+gen Bob's Blog - Which is better, iOS or Android?```
 
 Chat example from a user:
 ![ChatRWKV](ChatRWKV.png)
