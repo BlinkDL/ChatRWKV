@@ -13,6 +13,8 @@ It is not instruct-tuned for conversation yet, so don't directly ask it to do st
 
 Best prompt:
 
+```+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\nCan penguins fly?\n\nExpert Full Answer:\n```
+
 ```+gen \nAsk Expert\n\nQuestion:\nCan penguins fly?\n\nExpert Full Answer:\n```
 
 Other examples:
