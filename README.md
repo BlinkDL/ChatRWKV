@@ -5,7 +5,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
-**RWKV Discord:** https://discord.gg/bDSBUMeFpc
+**RWKV Discord:** https://discord.gg/bDSBUMeFpc (let's build together)
 
 ![RWKV-eval](RWKV-eval.png)
 
