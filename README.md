@@ -11,7 +11,11 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 It is not instruct-tuned for conversation yet, so don't directly ask it to do stuffs (unless it's a simple question).
 
-Best prompt:
+For "Instruct-test1" RWKV-4 models (available in 1B5/3B/7B https://huggingface.co/BlinkDL, check https://huggingface.co/datasets/bigscience/xP3all/viewer/en/train for prompt examples):
+
+```+gen \nQ: prompt\n\nA:```
+
+For all RWKV-4 models, a great Q&A prompt:
 
 ```+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\nCan penguins fly?\n\nFull Answer:\n```
 
