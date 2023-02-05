@@ -12,11 +12,18 @@ os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for fp32, but might be
 # Download model from https://huggingface.co/BlinkDL
 
 CHAT_LANG = 'English' # English Chinese (more to come)
+QA_PROMPT = False # True -> Q & A prompt, False -> User & Bot prompt
 
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230115-5775'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230128-6782'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221115-8047'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-Instruct-test1-20230124'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-430m/RWKV-4-Pile-430M-20220808-8066'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-340'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/14b-run1/rwkv-6210'
 
 elif CHAT_LANG == 'Chinese':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test4-20230116'
@@ -25,6 +32,12 @@ elif CHAT_LANG == 'Chinese':
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-490'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-415'
 
+if '-169M-' in args.MODEL_NAME:
+    args.n_layer = 12
+    args.n_embd = 768
+if '-430M-' in args.MODEL_NAME:
+    args.n_layer = 24
+    args.n_embd = 1024
 if '-1B5-' in args.MODEL_NAME or '/1.5-' in args.MODEL_NAME:
     args.n_layer = 24
     args.n_embd = 2048
@@ -34,7 +47,7 @@ elif '-3B-' in args.MODEL_NAME or '/3-' in args.MODEL_NAME:
 elif '-7B-' in args.MODEL_NAME or '/7-' in args.MODEL_NAME:
     args.n_layer = 32
     args.n_embd = 4096
-elif '-14B-' in args.MODEL_NAME or '/14-' in args.MODEL_NAME:
+elif '-14B-' in args.MODEL_NAME or '/14-' in args.MODEL_NAME or '/14b-' in args.MODEL_NAME:
     args.n_layer = 40
     args.n_embd = 5120
 
@@ -51,7 +64,7 @@ AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
-print(f'\nLoading ChatRWKV - {CHAT_LANG} - {args.RUN_DEVICE} - {args.FLOAT_MODE}')
+print(f'\nLoading ChatRWKV - {CHAT_LANG} - {args.RUN_DEVICE} - {args.FLOAT_MODE} - QA_PROMPT {QA_PROMPT}')
 from src.model_run import RWKV_RNN
 import numpy as np
 import torch
@@ -65,10 +78,7 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
 
-tokenizer = TOKENIZER([
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-], UNKNOWN_CHAR=None)
+tokenizer = TOKENIZER("20B_tokenizer.json")
 
 args.vocab_size = 50277
 args.head_qk = 0
@@ -77,15 +87,19 @@ args.grad_cp = 0
 args.my_pos_emb = 0
 
 if CHAT_LANG == 'English':
-    user = "User"
-    bot = "Bot"
     interface = ":"
 
-    # The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.
-    # The following is a conversation between a highly knowledgeable and intelligent AI called {bot}, and a human called {user}. In the following interactions, {user} and {bot} converse in natural language, and {bot} do its best to answer {user}'s questions. {bot} is respectful, polite and inclusive. {bot} knows a lot, and always tells the truth.
-
+    if QA_PROMPT:
+        user = "Q"
+        bot = "A"
+        intro = f'The following is a verbose and detailed Q & A conversation of factual information.'
+    else:
+        user = "User"
+        bot = "Bot"
+        intro = f'The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.'
+    
     init_prompt = f'''
-The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.
+{intro}
 
 {user}{interface} french revolution what year
 
@@ -125,15 +139,10 @@ elif CHAT_LANG == 'Chinese':
     user = "Q"
     bot = "A"
     interface = ":"
+    init_prompt = f'''
+Expert Questions & Helpful Answers
 
-    init_prompt = '''
-Q: 企鹅会飞吗？
-
-A: 企鹅是不会飞的。它们的翅膀主要用于游泳和平衡，而不是飞行。
-
-Q: 西瓜是什么
-
-A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西瓜的果实呈圆形或卵形，通常是绿色的，里面有红色或黄色的肉和很多的籽。西瓜味甜，多吃可以增加水分，是夏季非常受欢迎的水果之一。
+Ask Research Experts
 
 '''
     HELP_MSG = '''指令:
@@ -167,7 +176,7 @@ current_state = None
 
 AVOID_REPEAT_TOKENS = []
 for i in AVOID_REPEAT:
-    dd = tokenizer.tokenizer.encode(i)
+    dd = tokenizer.encode(i)
     assert len(dd) == 1
     AVOID_REPEAT_TOKENS += dd
 
@@ -182,7 +191,7 @@ def run_rnn(tokens, newline_adj = 0):
         else:
             current_state = model.forward(model_tokens, current_state, preprocess_only = True)
     
-    # print(f'### model ###\n[{tokenizer.tokenizer.decode(model_tokens)}]')
+    # print(f'### model ###\n[{tokenizer.decode(model_tokens)}]')
 
     out[0] = -999999999  # disable <|endoftext|>
     out[187] += newline_adj # adjust \n probability
@@ -212,7 +221,7 @@ def load_all_stat(srv, name):
 # Run inference
 print(f'\nRun prompt...')
 
-out = run_rnn(tokenizer.tokenizer.encode(init_prompt))
+out = run_rnn(tokenizer.encode(init_prompt))
 gc.collect()
 torch.cuda.empty_cache()
 
@@ -222,7 +231,7 @@ srv_list = ['dummy_server']
 for s in srv_list:
     save_all_stat(s, 'chat', out)
 
-print(f'### prompt ###\n[{tokenizer.tokenizer.decode(model_tokens)}]\n')
+print(f'### prompt ###\n[{tokenizer.decode(model_tokens)}]\n')
 
 def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
@@ -267,7 +276,7 @@ def on_message(message):
             # print(f'### prompt ###\n[{new}]')
             current_state = None
             model_tokens = []
-            out = run_rnn(tokenizer.tokenizer.encode(new))
+            out = run_rnn(tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:4].lower() == '+qq ':
@@ -275,7 +284,7 @@ def on_message(message):
             # print(f'### prompt ###\n[{new}]')
             current_state = None
             model_tokens = []
-            out = run_rnn(tokenizer.tokenizer.encode(new))
+            out = run_rnn(tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:4].lower() == '+qa ':
@@ -285,7 +294,7 @@ def on_message(message):
             new = f"{user}{interface} {real_msg}\n\n{bot}{interface}"
             # print(f'### qa ###\n[{new}]')
             
-            out = run_rnn(tokenizer.tokenizer.encode(new))
+            out = run_rnn(tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg.lower() == '+++':
@@ -309,22 +318,21 @@ def on_message(message):
                 model_tokens,
                 args.ctx_len,
                 temperature=x_temp,
-                top_p_usual=x_top_p,
-                top_p_newline=x_top_p,
+                top_p=x_top_p,
             )
             if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
                 out = run_rnn([token], newline_adj=-2)
             else:
                 out = run_rnn([token])
             
-            xxx = tokenizer.tokenizer.decode(model_tokens[out_last:])
+            xxx = tokenizer.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
                 if i >= FREE_GEN_LEN:
                     break
         print('\n')
-        # send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
+        # send_msg = tokenizer.decode(model_tokens[begin:]).strip()
         # print(f'### send ###\n[{send_msg}]')
         # reply_msg(send_msg)
         save_all_stat(srv, 'gen_1', out)
@@ -339,7 +347,7 @@ def on_message(message):
             out = load_all_stat(srv, 'chat')
             new = f"{user}{interface} {msg}\n\n{bot}{interface}"
             # print(f'### add ###\n[{new}]')
-            out = run_rnn(tokenizer.tokenizer.encode(new), newline_adj=-999999999)
+            out = run_rnn(tokenizer.encode(new), newline_adj=-999999999)
             save_all_stat(srv, 'chat_pre', out)
 
         begin = len(model_tokens)
@@ -359,22 +367,21 @@ def on_message(message):
                 model_tokens,
                 args.ctx_len,
                 temperature=x_temp,
-                top_p_usual=x_top_p,
-                top_p_newline=x_top_p,
+                top_p=x_top_p,
             )
             out = run_rnn([token], newline_adj=newline_adj)
 
-            xxx = tokenizer.tokenizer.decode(model_tokens[out_last:])
+            xxx = tokenizer.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
             
-            send_msg = tokenizer.tokenizer.decode(model_tokens[begin:])
+            send_msg = tokenizer.decode(model_tokens[begin:])
             if '\n\n' in send_msg:
                 send_msg = send_msg.strip()
                 break
             
-            # send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
+            # send_msg = tokenizer.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
             #     send_msg = send_msg[:-len(f'{user}{interface}')].strip()
             #     break
@@ -383,7 +390,7 @@ def on_message(message):
             #     break
 
         # print(f'{model_tokens}')
-        # print(f'[{tokenizer.tokenizer.decode(model_tokens)}]')
+        # print(f'[{tokenizer.decode(model_tokens)}]')
 
         # print(f'### send ###\n[{send_msg}]')
         # reply_msg(send_msg)
