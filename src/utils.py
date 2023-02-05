@@ -54,7 +54,7 @@ class TOKENIZER():
                 probs = probs.pow(1.0 / temperature)
             probs = probs / np.sum(probs)
             out = np.random.choice(a=len(probs), p=probs)
-            return out
+            return int(out)
         else:
             sorted_probs = torch.sort(probs, descending=True)[0]
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
@@ -63,4 +63,4 @@ class TOKENIZER():
             if temperature != 1.0:
                 probs = probs.pow(1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
-            return out
+            return int(out)

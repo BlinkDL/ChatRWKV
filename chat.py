@@ -2,17 +2,18 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 import os, copy, types, gc, sys
-
 args = types.SimpleNamespace()
-args.RUN_DEVICE = "cuda"  # 'cuda' // 'cpu'
-args.FLOAT_MODE = "fp16" # fp16 (good for GPU, not for CPU) // fp32 (good for CPU) // bf16 (worse accuracy, but available for CPU)
+
+args.RUN_DEVICE = "cuda"  # cuda // cpu
+# fp16 (good for GPU, does NOT support CPU) // fp32 (good for CPU) // bf16 (worse accuracy, supports CPU)
+args.FLOAT_MODE = "fp16"
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for fp32, but might be harmful for GPU fp16. please benchmark !!!
 
-# Download model from https://huggingface.co/BlinkDL
+CHAT_LANG = 'English' # English // Chinese // more to come
+QA_PROMPT = False # True: Q & A prompt // False: User & Bot prompt
 
-CHAT_LANG = 'English' # English Chinese (more to come)
-QA_PROMPT = False # True -> Q & A prompt, False -> User & Bot prompt
+# Download RWKV-4 models from https://huggingface.co/BlinkDL
 
 if CHAT_LANG == 'English':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230128-6782'
@@ -171,8 +172,7 @@ print(f'Loading model - {MODEL_NAME}')
 model = RWKV_RNN(args)
 
 model_tokens = []
-
-current_state = None
+model_state = None
 
 AVOID_REPEAT_TOKENS = []
 for i in AVOID_REPEAT:
@@ -183,15 +183,13 @@ for i in AVOID_REPEAT:
 ########################################################################################################
 
 def run_rnn(tokens, newline_adj = 0):
-    global model_tokens, current_state
-    for i in range(len(tokens)):
-        model_tokens += [int(tokens[i])]
-        if i == len(tokens) - 1:
-            out, current_state = model.forward(model_tokens, current_state)
-        else:
-            current_state = model.forward(model_tokens, current_state, preprocess_only = True)
-    
-    # print(f'### model ###\n[{tokenizer.decode(model_tokens)}]')
+    global model_tokens, model_state
+
+    tokens = [int(x) for x in tokens]
+    model_tokens += tokens
+    out, model_state = model.forward(tokens, model_state)
+
+    # print(f'### model ###\n{tokens}\n[{tokenizer.decode(model_tokens)}]')
 
     out[0] = -999999999  # disable <|endoftext|>
     out[187] += newline_adj # adjust \n probability
@@ -206,13 +204,13 @@ def save_all_stat(srv, name, last_out):
     n = f'{name}_{srv}'
     all_state[n] = {}
     all_state[n]['out'] = last_out
-    all_state[n]['rnn'] = copy.deepcopy(current_state)
+    all_state[n]['rnn'] = copy.deepcopy(model_state)
     all_state[n]['token'] = copy.deepcopy(model_tokens)
 
 def load_all_stat(srv, name):
-    global model_tokens, current_state
+    global model_tokens, model_state
     n = f'{name}_{srv}'
-    current_state = copy.deepcopy(all_state[n]['rnn'])
+    model_state = copy.deepcopy(all_state[n]['rnn'])
     model_tokens = copy.deepcopy(all_state[n]['token'])
     return all_state[n]['out']
 
@@ -237,7 +235,7 @@ def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
 
 def on_message(message):
-    global model_tokens, current_state
+    global model_tokens, model_state
 
     srv = 'dummy_server'
 
@@ -274,7 +272,7 @@ def on_message(message):
         if msg[:5].lower() == '+gen ':
             new = '\n' + msg[5:].strip()
             # print(f'### prompt ###\n[{new}]')
-            current_state = None
+            model_state = None
             model_tokens = []
             out = run_rnn(tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
@@ -282,7 +280,7 @@ def on_message(message):
         elif msg[:4].lower() == '+qq ':
             new = '\nQ: ' + msg[4:].strip() + '\nA:'
             # print(f'### prompt ###\n[{new}]')
-            current_state = None
+            model_state = None
             model_tokens = []
             out = run_rnn(tokenizer.encode(new))
             save_all_stat(srv, 'gen_0', out)
