@@ -38,11 +38,8 @@ class TOKENIZER():
     def decode(self, x):
         return self.tokenizer.decode(x)
 
-    def sample_logits(self, out, x, ctx_len, temperature=1.0, top_p=1.0):
-        # out[self.UNKNOWN_CHAR] = -float('Inf')
-        lastChar = int(x[-1])
-
-        probs = F.softmax(out, dim=-1)
+    def sample_logits(self, logits, x, ctx_len, temperature=1.0, top_p=1.0):
+        probs = F.softmax(logits.float(), dim=-1)
 
         if os.environ["RWKV_RUN_DEVICE"] == "cpu":
             probs = probs.numpy()

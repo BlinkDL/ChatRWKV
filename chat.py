@@ -1,8 +1,17 @@
 ########################################################################################################
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
+
 import os, copy, types, gc, sys
+import numpy as np
+try:
+    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
+except:
+    pass
+np.set_printoptions(precision=4, suppress=True, linewidth=200)
 args = types.SimpleNamespace()
+
+########################################################################################################
 
 args.RUN_DEVICE = "cuda"  # cuda // cpu
 # fp16 (good for GPU, does NOT support CPU) // fp32 (good for CPU) // bf16 (worse accuracy, supports CPU)
@@ -66,19 +75,12 @@ AVOID_REPEAT = '，。：？！'
 ########################################################################################################
 
 print(f'\nLoading ChatRWKV - {CHAT_LANG} - {args.RUN_DEVICE} - {args.FLOAT_MODE} - QA_PROMPT {QA_PROMPT}')
-from src.model_run import RWKV_RNN
-import numpy as np
 import torch
-from src.utils import TOKENIZER
-try:
-    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
-except:
-    pass
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
-np.set_printoptions(precision=4, suppress=True, linewidth=200)
-
+from src.model_run import RWKV_RNN
+from src.utils import TOKENIZER
 tokenizer = TOKENIZER("20B_tokenizer.json")
 
 args.vocab_size = 50277
@@ -86,6 +88,8 @@ args.head_qk = 0
 args.pre_ffn = 0
 args.grad_cp = 0
 args.my_pos_emb = 0
+os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
+MODEL_NAME = args.MODEL_NAME
 
 if CHAT_LANG == 'English':
     interface = ":"
@@ -164,9 +168,6 @@ Ask Research Experts
 '''
 
 # Load Model
-
-os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
-MODEL_NAME = args.MODEL_NAME
 
 print(f'Loading model - {MODEL_NAME}')
 model = RWKV_RNN(args)

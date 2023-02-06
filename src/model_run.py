@@ -2,13 +2,14 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import types
+import types, math, os, gc
 import torch
-import math, os, gc
 from torch.nn import functional as F
-import torch.nn as nn
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.allow_tf32 = True
+torch.backends.cuda.matmul.allow_tf32 = True
 
-MyModule = nn.Module
+MyModule = torch.nn.Module
 def __nop(ob):
     return ob
 MyFunction = __nop
@@ -38,20 +39,20 @@ class RWKV_RNN(MyModule):
 
         with torch.no_grad():
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
-            # refine weights and send to correct device
-            keys = list(w.keys())
+            keys = list(w.keys()) # refine weights and send to correct device
             print_need_newline = False
             for x in keys:
-                block_id = 0
-                if 'blocks.' in x:
-                    block_id = int(x.split('.')[1])
-                if 'att.output.weight' in x:
-                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
-                if 'ffn.value.weight' in x:
-                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
-                                
+                w[x].requires_grad = False
+                if x == 'emb.weight' or 'ln0' in x:
+                    continue
+                
+                block_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
+                
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
+                if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x:
+                    w[x] = w[x].t()
+                
                 if '.time_decay' in x:
                     w[x] = w[x].float()
                     w[x] = -torch.exp(w[x])
@@ -60,23 +61,24 @@ class RWKV_RNN(MyModule):
                 else:
                     w[x] = w[x].to(dtype=self.FLOAT_MODE)
 
-                if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x:
-                    w[x] = w[x].t()
-                w[x].requires_grad = False
-                if args.RUN_DEVICE == 'cuda' and x != 'emb.weight':
+                if 'att.output.weight' in x:
+                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
+                if 'ffn.value.weight' in x:
+                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
+                
+                if args.RUN_DEVICE == 'cuda':
                     w[x] = w[x].cuda()
 
-                if ('blocks.' not in x) or ('blocks.0.' in x):
+                if block_id == 0:
                     if print_need_newline:
                         print('\n', end = '')
                         print_need_newline = False
-                    print(x.ljust(40), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device)
+                    print(x.ljust(35), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device)
                 else:
                     print_need_newline = True
                     print('.', end = '', flush = True)
 
-        # store weights in self.w
-        keys = list(w.keys())
+        keys = list(w.keys()) # store weights in self.w
         self.w = types.SimpleNamespace()
         for x in keys:
             xx = x.split('.')
@@ -96,6 +98,10 @@ class RWKV_RNN(MyModule):
                         else:
                             setattr(here, xx[i], types.SimpleNamespace())
                     here = getattr(here, xx[i])
+
+        with torch.no_grad(): # precompute embedding
+            x = self.LN(self.w.emb.weight, self.w.blocks[0].ln0)
+            self.w.emb.weight = x.to(dtype=self.FLOAT_MODE)
 
         self.eval()
         gc.collect()
@@ -218,10 +224,7 @@ class RWKV_RNN(MyModule):
             SA = self.SA_seq if seq_mode else self.SA_one
             FF = self.FF_seq if seq_mode else self.FF_one
 
-            for i in range(args.n_layer):
-                if i == 0:
-                    x = self.LN(x, w.blocks[i].ln0)
-                
+            for i in range(args.n_layer):                
                 ww = w.blocks[i].att
                 x = x + SA(self.LN(x, w.blocks[i].ln1), state, i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
