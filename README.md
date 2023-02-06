@@ -57,7 +57,7 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-3b/tree/main
 小模型：1.5B 参数 ，需 3G 显存，效果差些：
 https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 
-如果没显卡，或者显存不够，可以用 cpu 模式（很慢）。
+如果使用核心显卡，或者显存不够，可以用 cpu 模式（很慢）。
 
 试试这些指令：
 ```
