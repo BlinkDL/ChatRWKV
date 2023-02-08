@@ -100,7 +100,10 @@ class RWKV_RNN(MyModule):
                     here = getattr(here, xx[i])
 
         with torch.no_grad(): # precompute embedding
-            x = self.LN(self.w.emb.weight, self.w.blocks[0].ln0)
+            try:
+                x = self.LN(self.w.emb.weight, self.w.blocks[0].ln0)
+            except:
+                x = F.layer_norm(self.w.emb.weight.float(), (self.args.n_embd,), weight=self.w.blocks[0].ln0.weight.float(), bias=self.w.blocks[0].ln0.bias.float())
             self.w.emb.weight = x.to(dtype=self.FLOAT_MODE)
 
         self.eval()
