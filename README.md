@@ -59,8 +59,11 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 
 如果没显卡，或者显存不够，可以用 cpu 模式（很慢）。
 
-试试这些指令：
+试试这些指令（注意这些指令都会忽略聊天内容！都应该用于问独立的问题！）：
 ```
+【最强问答指令，详细回答任何问题】
++gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n李白是谁？\n\nFull Answer:\n
+
 【使用+qa需要在chat.py设置QA_PROMPT=True然后才能看到内容丰富的长回答】
 +qa 奶茶好喝吗？
 +qa 猫喜欢做什么？
