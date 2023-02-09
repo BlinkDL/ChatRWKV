@@ -19,7 +19,7 @@ args.FLOAT_MODE = "fp16"
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for fp32, but might be harmful for GPU fp16. please benchmark !!!
 
-CHAT_LANG = 'English' # English // Chinese // more to come
+CHAT_LANG = 'English' # English // Chinese // more to come // 中文聊天推荐设置QA_PROMPT=False 问答推荐设置QA_PROMPT=True
 QA_PROMPT = False # True: Q & A prompt // False: User & Bot prompt
 
 # Download RWKV-4 models from https://huggingface.co/BlinkDL
@@ -144,10 +144,22 @@ elif CHAT_LANG == 'Chinese':
     user = "Q"
     bot = "A"
     interface = ":"
-    init_prompt = f'''
+    if QA_PROMPT:
+        init_prompt = f'''
 Expert Questions & Helpful Answers
 
 Ask Research Experts
+
+'''
+    else:
+        init_prompt = '''
+Q: 企鹅会飞吗
+
+A: 企鹅是不会飞的。它们的翅膀主要用于游泳和平衡，而不是飞行。
+
+Q: 西瓜是什么
+
+A: 西瓜是一种常见的水果，是一种多年生蔓生藤本植物。西瓜的果实呈圆形或卵形，通常是绿色的，里面有红色或黄色的肉和很多的籽。西瓜味甜，多吃可以增加水分，是夏季非常受欢迎的水果之一。
 
 '''
     HELP_MSG = '''指令:
