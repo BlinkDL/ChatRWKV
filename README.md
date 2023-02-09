@@ -64,6 +64,9 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 【最强问答指令，详细回答任何问题】
 +gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n李白是谁？\n\nFull Answer:\n
 
+【让电脑写东西的方法，像这样引导它】
++gen \n活动出席发言稿：\n大家好，
+
 【使用+qa需要在chat.py设置QA_PROMPT=True然后才能看到内容丰富的长回答】
 +qa 奶茶好喝吗？
 +qa 猫喜欢做什么？
