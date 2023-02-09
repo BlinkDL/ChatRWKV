@@ -61,6 +61,7 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 
 试试这些指令：
 ```
+【使用+qa需要在chat.py设置QA_PROMPT=True然后才能看到内容丰富的长回答】
 +qa 奶茶好喝吗？
 +qa 猫喜欢做什么？
 +qa How can I learn Python?
