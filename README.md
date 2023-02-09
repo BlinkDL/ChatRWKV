@@ -1,5 +1,5 @@
 # ChatRWKV
-ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM.
+ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :)
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
@@ -46,7 +46,7 @@ QQ群 143626394（加入时请简单自我介绍）（马上满了，新人加�
 
 在 chat.py 修改 CHAT_LANG 为 Chinese，修改 MODEL_NAME 为你下载的模型路径。
 
-必须下载双语模型（EngChn），选日期最新的。
+必须下载双语模型（EngChn），选最新的，目前最新是 test4 系列。
 
 大模型：7B 参数，需 14G 显存，效果好（以后可以优化显存占用和速度，但现在忙）：
 https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main
