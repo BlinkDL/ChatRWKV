@@ -37,8 +37,11 @@ Other examples:
 
 ```+gen Bob's Blog - Which is better, iOS or Android?```
 
-Chat example from a user:
-![ChatRWKV](ChatRWKV.png)
+![ChatRWKV](misc/sample-1.png)
+![ChatRWKV](misc/sample-2.png)
+![ChatRWKV](misc/sample-3.png)
+![ChatRWKV](misc/sample-4.png)
+![ChatRWKV](misc/sample-5.png)
 
 ## 中文模型
 
@@ -82,3 +85,5 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 +gen 创业思路：\n1.
 +gen import torch
 ```
+
+![ChatRWKV](ChatRWKV.png)
