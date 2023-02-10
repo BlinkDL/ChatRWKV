@@ -39,6 +39,8 @@ class RWKV_RNN(MyModule):
 
         with torch.no_grad():
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
+            args.n_embd = w['emb.weight'].shape[1]
+            args.n_layer = 0
             keys = list(w.keys()) # refine weights and send to correct device
             print_need_newline = False
             for x in keys:
@@ -47,6 +49,7 @@ class RWKV_RNN(MyModule):
                     continue
                 
                 block_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
+                args.n_layer = max(args.n_layer, block_id+1)
                 
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
@@ -69,14 +72,21 @@ class RWKV_RNN(MyModule):
                 if args.RUN_DEVICE == 'cuda':
                     w[x] = w[x].cuda()
 
+                shape = w[x].shape
+                shape = [i for i in shape if i != 1]
+                if len(shape) > 1:
+                    shape = f"  {str(shape[0]).rjust(5)} {str(shape[1]).rjust(5)}"
+                else:
+                    shape = f"  {str(shape[0]).rjust(5)}      "
                 if block_id == 0:
                     if print_need_newline:
                         print('\n', end = '')
                         print_need_newline = False
-                    print(x.ljust(35), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device)
+                    print(x.ljust(32), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device, shape)
                 else:
                     print_need_newline = True
                     print('.', end = '', flush = True)
+        print(f'\nn_layer {args.n_layer} n_embd {args.n_embd} ctx_len {args.ctx_len}')
 
         keys = list(w.keys()) # store weights in self.w
         self.w = types.SimpleNamespace()

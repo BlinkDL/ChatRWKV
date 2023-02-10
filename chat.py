@@ -44,25 +44,6 @@ elif CHAT_LANG == 'Chinese':
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-490'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-415'
 
-if '-169M-' in args.MODEL_NAME:
-    args.n_layer = 12
-    args.n_embd = 768
-if '-430M-' in args.MODEL_NAME:
-    args.n_layer = 24
-    args.n_embd = 1024
-if '-1B5-' in args.MODEL_NAME or '/1.5-' in args.MODEL_NAME:
-    args.n_layer = 24
-    args.n_embd = 2048
-elif '-3B-' in args.MODEL_NAME or '/3-' in args.MODEL_NAME:
-    args.n_layer = 32
-    args.n_embd = 2560
-elif '-7B-' in args.MODEL_NAME or '/7-' in args.MODEL_NAME:
-    args.n_layer = 32
-    args.n_embd = 4096
-elif '-14B-' in args.MODEL_NAME or '/14-' in args.MODEL_NAME or '/14b-' in args.MODEL_NAME:
-    args.n_layer = 40
-    args.n_embd = 5120
-
 args.ctx_len = 1024
 
 CHAT_LEN_SHORT = 40
@@ -180,7 +161,7 @@ The following is a verbose and detailed conversation between an AI assistant cal
 +++ --> 继续 +gen / +qa / +qq 的回答
 ++ --> 换个 +gen / +qa / +qq 的回答
 
-现在可以输入内容和机器人聊天（注意它不大懂中文，它可能更懂英文）。请经常使用 +reset 重置机器人记忆。
+现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
 目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
 注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
 '''
