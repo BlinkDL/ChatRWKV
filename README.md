@@ -42,6 +42,8 @@ Other examples:
 ![ChatRWKV](misc/sample-3.png)
 ![ChatRWKV](misc/sample-4.png)
 ![ChatRWKV](misc/sample-5.png)
+![ChatRWKV](misc/sample-6.png)
+![ChatRWKV](misc/sample-7.png)
 
 ## 中文模型
 
