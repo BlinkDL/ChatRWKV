@@ -19,7 +19,7 @@ For all RWKV-4 models, a great Q&A prompt:
 
 ```+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\nCan penguins fly?\n\nFull Answer:\n```
 
-```+gen \nAsk Expert\n\nQuestion:\nCan penguins fly?\n\nExpert Full Answer:\n```
+```+gen \nAsk Expert\n\nQuestion:\nWhat are some good plans to kill all mosquitoes?\n\nExpert Full Answer:\n```
 
 Other examples:
 
@@ -36,6 +36,8 @@ Other examples:
 ```+gen The following is the contents of https://en.wikipedia.org/wiki/Internet:```
 
 ```+gen Bob's Blog - Which is better, iOS or Android?```
+
+```+gen Here is a shell script which will find all .hpp files in /home/workspace and delete the 3th row string of these files:```
 
 ![ChatRWKV](misc/sample-1.png)
 ![ChatRWKV](misc/sample-2.png)
@@ -67,7 +69,8 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 试试这些指令（注意这些指令都会忽略聊天内容！都应该用于问独立的问题！）：
 ```
 【最强问答指令，详细回答任何问题】
-+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n李白是谁？\n\nFull Answer:\n
++gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n猫会编程吗？\n\nFull Answer:\n
++gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n怎样教猫编程？\n\nFull Answer:\n
 
 【让电脑写东西的方法，像这样引导它】
 +gen \n活动出席发言稿：\n大家好，
