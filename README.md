@@ -69,8 +69,8 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 咒语非常重要。试试这些咒语（注意这些咒语都会忽略聊天内容！都应该用于问独立的问题！）：
 ```
 【最强问答咒语，详细回答任何问题】
-+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n企鹅会飞吗？\n\nFull Answer:\n
-+gen \nAsk Expert\n\nQuestion:\n企鹅会飞吗？\n\nExpert Full Answer:\n
++gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n猫会编程吗？\n\nFull Answer:\n
++gen \nAsk Expert\n\nQuestion:\n猫会编程吗？\n\nExpert Full Answer:\n
 
 【让电脑写东西的方法，像这样引导它】
 +gen \n活动出席发言稿：\n大家好，
