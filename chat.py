@@ -11,7 +11,7 @@ except:
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
 args = types.SimpleNamespace()
 
-print('ChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
+print('\n\nChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
 
 ########################################################################################################
 
@@ -128,9 +128,6 @@ This is not instruct-tuned for conversation yet, so don't expect good quality. B
 Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
 '''
 elif CHAT_LANG == 'Chinese':
-    print('By 彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957')
-    print('如果喜欢，欢迎看我们的优质护眼灯: https://withablink.taobao.com')
-
     interface = ":"
     if QA_PROMPT:
         user = "Q"
@@ -168,15 +165,19 @@ The following is a verbose and detailed conversation between an AI assistant cal
 +++ --> 继续 +gen / +qa / +qq 的回答
 ++ --> 换个 +gen / +qa / +qq 的回答
 
+作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
+
+如果喜欢，欢迎看我们的优质护眼灯: https://withablink.taobao.com
+
 现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
 目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
 注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
 
 请先试下列咒语，理解咒语的写法！咒语至关重要。
-+gen Ask Expert\n\nQuestion:\n猫会编程吗？\n\nExpert Full Answer:\n
-+gen \n活动出席发言稿：\n大家好，
-+gen 创业思路：\n1.
++gen \\n活动出席发言稿：\\n大家好，
++gen 创业思路：\\n1.
 +gen import torch
++gen Ask Expert\\n\\nQuestion:\\n猫会编程吗？\\n\\nExpert Full Answer:\\n
 '''
 
 # Load Model
