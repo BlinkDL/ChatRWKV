@@ -175,9 +175,9 @@ The following is a verbose and detailed conversation between an AI assistant cal
 
 请先试下列咒语，理解咒语的写法！咒语至关重要。
 +gen \\n活动出席发言稿：\\n大家好，
-+gen 创业思路：\\n1.
-+gen import torch
-+gen Ask Expert\\n\\nQuestion:\\n猫会编程吗？\\n\\nExpert Full Answer:\\n
++gen \\n创业思路：\\n1.
++gen \\nimport torch
++gen \\nAsk Expert\\n\\nQuestion:\\n企鹅会飞吗？\\n\\nExpert Full Answer:\\n
 '''
 
 # Load Model
