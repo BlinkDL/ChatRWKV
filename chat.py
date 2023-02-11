@@ -175,9 +175,13 @@ The following is a verbose and detailed conversation between an AI assistant cal
 
 请先试下列咒语，理解咒语的写法！咒语至关重要。
 +gen \\n活动出席发言稿：\\n大家好，
-+gen \\n创业思路：\\n1.
++gen \\n怎样创立一家快速盈利的AI公司：\\n1.
++gen 二向箔是一种超级武器，它的原理是
 +gen \\nimport torch
-+gen \\nAsk Expert\\n\\nQuestion:\\n猫会编程吗？\\n\\nExpert Full Answer:\\n
+【下面这些多试几次】
++qq 请以《我的驴》为题写一篇作文
++qq 请以《企鹅》为题写一首诗歌
++qq 请设定一个奇幻世界，告诉我详细的世界设定。
 '''
 
 # Load Model

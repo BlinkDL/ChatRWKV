@@ -68,12 +68,21 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 
 咒语非常重要。试试这些咒语（注意这些咒语都会忽略聊天内容！都应该用于问独立的问题！）：
 ```
-【最强问答咒语，详细回答任何问题】
-+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n猫会编程吗？\n\nFull Answer:\n
-+gen \nAsk Expert\n\nQuestion:\n猫会编程吗？\n\nExpert Full Answer:\n
-
 【让电脑写东西的方法，像这样引导它】
 +gen \n活动出席发言稿：\n大家好，
++gen \n怎样创立一家快速盈利的AI公司：\n1.
++gen 二向箔是一种超级武器，它的原理是
++gen 我抬头一看，竟然是
++gen import torch
+
+【这些多试几次】
++qq 请以《我的驴》为题写一篇作文
++qq 请以《企鹅》为题写一首诗歌
++qq 请设定一个奇幻世界，告诉我详细的世界设定。
+
+【问答咒语】
++gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\n猫会编程吗？\n\nFull Answer:\n
++gen \nAsk Expert\n\nQuestion:\n猫会编程吗？\n\nExpert Full Answer:\n
 
 【使用+qa需要在chat.py设置QA_PROMPT=True然后才能看到内容丰富的长回答】
 +qa 奶茶好喝吗？
@@ -81,14 +90,6 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 +qa How can I learn Python?
 +qa 猫会编程吗？
 +qa 知乎大V有哪些特点？
-
-+qq 请以《我的驴》为题写一篇作文
-+qq 请以《企鹅》为题写一首诗歌
-
-+gen 二向箔是一种超级武器，它的原理是
-+gen 我抬头一看，竟然是
-+gen 创业思路：\n1.
-+gen import torch
 ```
 
 ![ChatRWKV](ChatRWKV.png)
