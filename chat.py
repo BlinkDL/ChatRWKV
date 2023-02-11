@@ -12,8 +12,6 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 args = types.SimpleNamespace()
 
 print('ChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
-print('By 彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957')
-print('如果喜欢，欢迎看我们的优质护眼灯: https://withablink.taobao.com')
 
 ########################################################################################################
 
@@ -130,6 +128,9 @@ This is not instruct-tuned for conversation yet, so don't expect good quality. B
 Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
 '''
 elif CHAT_LANG == 'Chinese':
+    print('By 彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957')
+    print('如果喜欢，欢迎看我们的优质护眼灯: https://withablink.taobao.com')
+
     interface = ":"
     if QA_PROMPT:
         user = "Q"
