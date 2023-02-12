@@ -21,6 +21,14 @@ args.FLOAT_MODE = "fp16"
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 
+# please tune these (test True/False for all of them). can significantly improve speed.
+# torch._C._jit_set_profiling_executor(True)
+# torch._C._jit_set_profiling_mode(True)
+# torch._C._jit_override_can_fuse_on_cpu(True)
+# torch._C._jit_override_can_fuse_on_gpu(True)
+# torch._C._jit_set_texpr_fuser_enabled(False)
+# torch._C._jit_set_nvfuser_enabled(False)
+
 CHAT_LANG = 'English' # English // Chinese // more to come
 
 QA_PROMPT = False # True: Q & A prompt // False: User & Bot prompt

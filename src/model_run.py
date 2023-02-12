@@ -14,13 +14,9 @@ def __nop(ob):
     return ob
 MyFunction = __nop
 
-if os.environ["RWKV_JIT_ON"] == "1":
+if int(os.environ["RWKV_JIT_ON"]) > 0:
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
-    torch._C._jit_override_can_fuse_on_cpu(True)
-    torch._C._jit_override_can_fuse_on_gpu(True)
-    if os.environ["RWKV_RUN_DEVICE"] == 'cuda':
-        torch._C._jit_set_nvfuser_enabled(False) # False -> faster
 
 print(f'\nRWKV_JIT_ON {os.environ["RWKV_JIT_ON"]}\n')
 
