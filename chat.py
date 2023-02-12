@@ -19,7 +19,7 @@ args.RUN_DEVICE = "cuda"  # cuda // cpu
 # fp16 (good for GPU, does NOT support CPU) // fp32 (good for CPU) // bf16 (worse accuracy, supports CPU)
 args.FLOAT_MODE = "fp16"
 
-os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for fp32, but might be harmful for GPU fp16. please benchmark !!!
+os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
