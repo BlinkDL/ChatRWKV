@@ -59,6 +59,7 @@ AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
+os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
 print(f'\nLoading ChatRWKV - {CHAT_LANG} - {args.RUN_DEVICE} - {args.FLOAT_MODE} - QA_PROMPT {QA_PROMPT}')
 import torch
 torch.backends.cudnn.benchmark = True
@@ -73,7 +74,6 @@ args.head_qk = 0
 args.pre_ffn = 0
 args.grad_cp = 0
 args.my_pos_emb = 0
-os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
 MODEL_NAME = args.MODEL_NAME
 
 if CHAT_LANG == 'English':
