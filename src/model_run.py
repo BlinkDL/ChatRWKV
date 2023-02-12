@@ -17,6 +17,10 @@ MyFunction = __nop
 if os.environ["RWKV_JIT_ON"] == "1":
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
+    # torch._C._jit_override_can_fuse_on_cpu(True)
+    # torch._C._jit_override_can_fuse_on_gpu(True)
+    # torch._C._jit_set_texpr_fuser_enabled(False)
+    # torch._C._jit_set_nvfuser_enabled(False)
 
 print(f'\nRWKV_JIT_ON {os.environ["RWKV_JIT_ON"]}\n')
 
@@ -64,10 +68,11 @@ class RWKV_RNN(MyModule):
                 else:
                     w[x] = w[x].to(dtype=self.FLOAT_MODE)
 
-                if 'att.output.weight' in x:
-                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
-                if 'ffn.value.weight' in x:
-                    w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
+                if args.FLOAT_MODE == 'fp16':
+                    if 'att.output.weight' in x:
+                        w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
+                    if 'ffn.value.weight' in x:
+                        w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
                 
                 if args.RUN_DEVICE == 'cuda':
                     w[x] = w[x].cuda()
@@ -182,7 +187,7 @@ class RWKV_RNN(MyModule):
 
     @MyFunction
     def SA_seq(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
-        xx = torch.cat((state[5*i+0].to(dtype=self.FLOAT_MODE).unsqueeze(0), x[:-1,:]))
+        xx = torch.cat((state[5*i+1].to(dtype=self.FLOAT_MODE).unsqueeze(0), x[:-1,:]))
         xk = x * time_mix_k + xx * (1 - time_mix_k)
         xv = x * time_mix_v + xx * (1 - time_mix_v)
         xr = x * time_mix_r + xx * (1 - time_mix_r)
@@ -237,7 +242,7 @@ class RWKV_RNN(MyModule):
             SA = self.SA_seq if seq_mode else self.SA_one
             FF = self.FF_seq if seq_mode else self.FF_one
 
-            for i in range(args.n_layer):                
+            for i in range(args.n_layer):
                 ww = w.blocks[i].att
                 x = x + SA(self.LN(x, w.blocks[i].ln1), state, i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
@@ -248,8 +253,9 @@ class RWKV_RNN(MyModule):
                     ww.time_mix_k, ww.time_mix_r, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight)
                 
-                if (i+1) % RWKV_RESCALE_LAYER == 0:
-                    x = x / 2
+                if args.FLOAT_MODE == 'fp16':
+                    if (i+1) % RWKV_RESCALE_LAYER == 0:
+                        x = x / 2
 
             if preprocess_only:
                 return state
