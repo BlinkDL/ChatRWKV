@@ -9,6 +9,8 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV Discord:** https://discord.gg/bDSBUMeFpc (let's build together)
 
+**Twitter:** https://twitter.com/BlinkDL_AI
+
 ![RWKV-eval](RWKV-eval.png)
 
 It is not instruct-tuned for conversation yet, so don't directly ask it to do stuffs (unless it's a simple question).
@@ -95,3 +97,7 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 ```
 
 ![ChatRWKV](ChatRWKV.png)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=BlinkDL/ChatRWKV&type=Date)](https://star-history.com/#BlinkDL/ChatRWKV&Date)
