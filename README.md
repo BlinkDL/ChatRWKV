@@ -1,13 +1,15 @@
 # ChatRWKV
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :)
 
-**Please upgrade to latest code. Got a very serious bug in computation earlier.**
+**Please upgrade to latest code. Got a bug in computation in earlier version.**
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
 **RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
 **RWKV Discord:** https://discord.gg/bDSBUMeFpc (let's build together)
+
+**Twitter:** https://twitter.com/BlinkDL_AI
 
 ![RWKV-eval](RWKV-eval.png)
 
@@ -95,3 +97,7 @@ https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/tree/main
 ```
 
 ![ChatRWKV](ChatRWKV.png)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=BlinkDL/ChatRWKV&type=Date)](https://star-history.com/#BlinkDL/ChatRWKV&Date)
