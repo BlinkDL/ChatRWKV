@@ -57,7 +57,7 @@ QQ群 143626394（加入时请简单自我介绍）（马上满了，新人加�
 
 在 chat.py 修改 CHAT_LANG 为 Chinese，修改 MODEL_NAME 为你下载的模型路径。
 
-必须下载双语模型（EngChn），选最新的，目前最新是 test4 系列。
+必须下载双语模型（EngChn），选最新的，目前最新是 test4 系列。**（最新推出 testNovel 系列网文模型，在网文训练，只适合 +gen 续写网文）**
 
 大模型：7B 参数，需 14G 显存，效果好（以后可以优化显存占用和速度，但现在忙）：
 https://huggingface.co/BlinkDL/rwkv-4-pile-7b/tree/main
