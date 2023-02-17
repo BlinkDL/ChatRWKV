@@ -27,11 +27,13 @@ For "Instruct-test1" RWKV-4 models (available in 1B5/3B/7B https://huggingface.c
 
 ```+gen \nQ: prompt\n\nA:```
 
-For all RWKV-4 models, a great Q&A prompt:
+For all RWKV-4 models, some great Q&A prompts:
 
 ```+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\nCan penguins fly?\n\nFull Answer:\n```
 
 ```+gen \nAsk Expert\n\nQuestion:\nWhat are some good plans to kill all mosquitoes?\n\nExpert Full Answer:\n```
+
+```+gen \nQ & A\n\nQuestion:\nHow's the weather of Mars?\n\nDetailed Expert Answer:\n```
 
 Other examples:
 
