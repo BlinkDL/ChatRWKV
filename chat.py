@@ -42,7 +42,7 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-441-ctx2048-20230217'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-711-ctx2048-20230216'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-671-ctx2048-20230216'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-446'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-461'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/3-run1z/rwkv-711'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-671'
 
@@ -176,18 +176,21 @@ The following is a verbose and detailed conversation between an AI assistant cal
 
 作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
 
-如果喜欢，欢迎看我们的优质护眼灯: https://withablink.taobao.com
+如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
 
 现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
 目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
 注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
 
 请先试下列咒语，理解咒语的写法！咒语至关重要。
+【中文网文模型，试下面这些】
++gen 这是一颗
++gen 下面是科幻史诗长篇巨著，描写细致，有数百位英雄人物和宏大的星际文明战争，情节曲折离奇。\\n第一章
++gen 这是一个修真世界，详细世界设定如下：\\n1.
+【中文问答模型，试下面这些】
 +gen \\n活动出席发言稿：\\n大家好，
 +gen \\n怎样创立一家快速盈利的AI公司：\\n1.
-+gen 二向箔是一种超级武器，它的原理是
 +gen \\nimport torch
-【下面这些多试几次】
 +qq 请以《我的驴》为题写一篇作文
 +qq 请以《企鹅》为题写一首诗歌
 +qq 请设定一个奇幻世界，告诉我详细的世界设定。
