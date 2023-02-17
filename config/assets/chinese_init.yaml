@@ -1,0 +1,25 @@
+interface: ":"
+chat_user: "User"
+chat_bot: "Bot"
+chat_intro: "下面是一个人工智能助手 {bot}, 和一个人类 {user} 的对话. {bot} 非常的聪慧,有趣,礼貌且富有学识."
+
+
+
+qa_user: "Q"
+qa_bot: "A"
+qa_intro: "问答 Q&A
+
+专家来回答你:
+
+"
+init_prompt: "{intro}
+
+{user}{interface} LHC 是什么
+
+{bot}{interface} LHC 是由 CERN 制造的高能粒子对撞机, 建于 2008, 用于验证希格斯波色子的存在.
+
+{user}{interface} 企鹅会飞吗
+
+{bot}{interface} 企鹅是不会飞的。它们的翅膀主要用于游泳和平衡，而不是飞行。
+
+"
