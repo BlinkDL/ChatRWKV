@@ -39,7 +39,7 @@ class TOKENIZER():
         return self.tokenizer.decode(x)
 
     def sample_logits(self, logits, x, ctx_len, temperature=1.0, top_p=1.0):
-        probs = F.softmax(logits.float() / temperature, dim=-1)
+        probs = F.softmax(logits.float(), dim=-1)
 
         if os.environ["RWKV_RUN_DEVICE"] == "cpu":
             probs = probs.numpy()
@@ -47,6 +47,8 @@ class TOKENIZER():
             cumulative_probs = np.cumsum(sorted_probs)
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
+            if temperature != 1.0:
+                probs = probs.pow(1.0 / temperature)
             probs = probs / np.sum(probs)
             out = np.random.choice(a=len(probs), p=probs)
             return int(out)
@@ -55,5 +57,7 @@ class TOKENIZER():
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
+            if temperature != 1.0:
+                probs = probs.pow(1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
             return int(out)
