@@ -18,6 +18,7 @@ print('\n\nChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
 args.RUN_DEVICE = "cuda"  # cuda // cpu
 # fp16 (good for GPU, does NOT support CPU) // fp32 (good for CPU) // bf16 (worse accuracy, supports CPU)
 args.FLOAT_MODE = "fp16"
+args.NUM_PARA_GPUS = 2
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 

@@ -36,19 +36,30 @@ class RWKV_RNN(MyModule):
         elif args.FLOAT_MODE == 'bf16':
             self.FLOAT_MODE = torch.bfloat16
         self.RUN_DEVICE = args.RUN_DEVICE
-
+        
         with torch.no_grad():
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
             args.n_embd = w['emb.weight'].shape[1]
             args.n_layer = 0
             keys = list(w.keys()) # refine weights and send to correct device
             print_need_newline = False
+            
+            # parallelize on multiple GPUs
+            assert args.NUM_PARA_GPUS >= 1
+            layer_ids = set([int(x.split('.')[1]) if ('blocks.' in x) else 0 for x in keys])
+            layer_shard = math.ceil(len(layer_ids) / args.NUM_PARA_GPUS)
+            self.layer_device_map = [None for _ in layer_ids]
+            print(layer_ids, layer_shard)
             for x in keys:
                 w[x].requires_grad = False
                 if x == 'emb.weight' or 'ln0' in x:
                     continue
                 
                 block_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
+                # get current gpu id
+                cur_gpu_id = block_id // layer_shard
+                if self.layer_device_map[block_id] is None:
+                    self.layer_device_map[block_id] = cur_gpu_id
                 args.n_layer = max(args.n_layer, block_id+1)
                 
                 if '.time_' in x:
@@ -71,7 +82,7 @@ class RWKV_RNN(MyModule):
                         w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
                 
                 if args.RUN_DEVICE == 'cuda':
-                    w[x] = w[x].cuda()
+                    w[x] = w[x].cuda(cur_gpu_id)
 
                 shape = w[x].shape
                 shape = [i for i in shape if i != 1]
@@ -79,14 +90,14 @@ class RWKV_RNN(MyModule):
                     shape = f"  {str(shape[0]).rjust(5)} {str(shape[1]).rjust(5)}"
                 else:
                     shape = f"  {str(shape[0]).rjust(5)}      "
-                if block_id == 0:
-                    if print_need_newline:
-                        print('\n', end = '')
-                        print_need_newline = False
-                    print(x.ljust(32), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device, shape)
-                else:
-                    print_need_newline = True
-                    print('.', end = '', flush = True)
+                # if block_id == 0:
+                if print_need_newline:
+                    print('\n', end = '')
+                    print_need_newline = False
+                print(x.ljust(32), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device, shape)
+                # else:
+                #     print_need_newline = True
+                #     print('.', end = '', flush = True)
         print(f'\nn_layer {args.n_layer} n_embd {args.n_embd} ctx_len {args.ctx_len}')
 
         keys = list(w.keys()) # store weights in self.w
@@ -128,7 +139,7 @@ class RWKV_RNN(MyModule):
 
     @MyFunction
     def FF_one(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
-        xx = state[5*i+0].to(dtype=self.FLOAT_MODE)
+        xx = state[5*i+0].to(dtype=self.FLOAT_MODE, device=x.device)
         xk = x * time_mix_k + xx * (1 - time_mix_k)
         xr = x * time_mix_r + xx * (1 - time_mix_r)
         state[5*i+0] = x.float()
@@ -140,7 +151,7 @@ class RWKV_RNN(MyModule):
 
     @MyFunction
     def FF_seq(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
-        xx = torch.cat((state[5*i+0].to(dtype=self.FLOAT_MODE).unsqueeze(0), x[:-1,:]))
+        xx = torch.cat((state[5*i+0].to(dtype=self.FLOAT_MODE, device=x.device).unsqueeze(0), x[:-1,:]))
         xk = x * time_mix_k + xx * (1 - time_mix_k)
         xr = x * time_mix_r + xx * (1 - time_mix_r)
         state[5*i+0] = x[-1,:].float()
@@ -152,7 +163,7 @@ class RWKV_RNN(MyModule):
 
     @MyFunction
     def SA_one(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
-        xx = state[5*i+1].to(dtype=self.FLOAT_MODE)
+        xx = state[5*i+1].to(dtype=self.FLOAT_MODE, device=x.device)
         xk = x * time_mix_k + xx * (1 - time_mix_k)
         xv = x * time_mix_v + xx * (1 - time_mix_v)
         xr = x * time_mix_r + xx * (1 - time_mix_r)
@@ -162,9 +173,9 @@ class RWKV_RNN(MyModule):
         k = (xk @ kw).float()
         v = (xv @ vw).float()
 
-        aa = state[5*i+2]
-        bb = state[5*i+3]
-        pp = state[5*i+4]
+        aa = state[5*i+2].to(device=x.device)
+        bb = state[5*i+3].to(device=x.device)
+        pp = state[5*i+4].to(device=x.device)
         ww = time_first + k
         p = torch.maximum(pp, ww)
         e1 = torch.exp(pp - p)
@@ -178,12 +189,13 @@ class RWKV_RNN(MyModule):
         state[5*i+2] = e1 * aa + e2 * v
         state[5*i+3] = e1 * bb + e2
         state[5*i+4] = p
-        wkv = (a / b).to(dtype=self.FLOAT_MODE)
+        wkv = (a / b).to(dtype=self.FLOAT_MODE, device=x.device)
         return (r * wkv) @ ow
 
     @MyFunction
     def SA_seq(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
-        xx = torch.cat((state[5*i+1].to(dtype=self.FLOAT_MODE).unsqueeze(0), x[:-1,:]))
+        s = state[5*i+1].to(dtype=self.FLOAT_MODE, device=x.device).unsqueeze(0)
+        xx = torch.cat((s, x[:-1,:]))
         xk = x * time_mix_k + xx * (1 - time_mix_k)
         xv = x * time_mix_v + xx * (1 - time_mix_v)
         xr = x * time_mix_r + xx * (1 - time_mix_r)
@@ -193,9 +205,9 @@ class RWKV_RNN(MyModule):
         k = (xk @ kw).float()
         v = (xv @ vw).float()
 
-        aa = state[5*i+2]
-        bb = state[5*i+3]
-        pp = state[5*i+4]
+        aa = state[5*i+2].to(device=x.device)
+        bb = state[5*i+3].to(device=x.device)
+        pp = state[5*i+4].to(device=x.device)
         T = x.shape[0]
         for t in range(T):
             ww = time_first + k[t]
@@ -216,7 +228,7 @@ class RWKV_RNN(MyModule):
                 state[5*i+2] = e1 * aa + e2 * v[t]
                 state[5*i+3] = e1 * bb + e2
                 state[5*i+4] = p
-            xx[t] = (a / b).to(dtype=self.FLOAT_MODE)
+            xx[t] = (a / b).to(dtype=self.FLOAT_MODE, device=x.device)
         return (r * xx) @ ow
 
     def forward(self, tokens, state, preprocess_only = False):
@@ -228,7 +240,7 @@ class RWKV_RNN(MyModule):
 
             x = w.emb.weight[tokens] if seq_mode else w.emb.weight[tokens[-1]]
             if self.RUN_DEVICE == 'cuda':
-                x = x.cuda()
+                x = x.cuda(0)
 
             if state == None:
                 state = torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE)
@@ -237,9 +249,11 @@ class RWKV_RNN(MyModule):
 
             SA = self.SA_seq if seq_mode else self.SA_one
             FF = self.FF_seq if seq_mode else self.FF_one
-
+            assert args.n_layer == len(self.layer_device_map)
             for i in range(args.n_layer):
                 ww = w.blocks[i].att
+                if self.RUN_DEVICE == 'cuda':
+                    x = x.cuda(self.layer_device_map[i])
                 x = x + SA(self.LN(x, w.blocks[i].ln1), state, i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight)
@@ -255,7 +269,9 @@ class RWKV_RNN(MyModule):
 
             if preprocess_only:
                 return state
-
+            
+            if self.RUN_DEVICE == 'cuda':
+                x = x.cuda(0)
             x = self.LN(x[-1,:], w.ln_out) if seq_mode else self.LN(x, w.ln_out)
             x = w.head.weight @ x
 
