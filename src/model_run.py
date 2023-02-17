@@ -70,8 +70,8 @@ class RWKV_RNN(MyModule):
                     if 'ffn.value.weight' in x:
                         w[x] = w[x] / (2 ** int(block_id // RWKV_RESCALE_LAYER))
                 
-                if args.RUN_DEVICE == 'cuda':
-                    w[x] = w[x].cuda()
+                if 'cuda' in args.RUN_DEVICE:
+                    w[x] = w[x].to(self.RUN_DEVICE)
 
                 shape = w[x].shape
                 shape = [i for i in shape if i != 1]
@@ -226,9 +226,9 @@ class RWKV_RNN(MyModule):
 
             seq_mode = len(tokens) > 1
 
-            x = w.emb.weight[tokens] if seq_mode else w.emb.weight[tokens[-1]]
-            if self.RUN_DEVICE == 'cuda':
-                x = x.cuda()
+            x = w.emb.weight[tokens] if seq_mode else w.emb.weight[tokens[0]]
+            if 'cuda' in self.RUN_DEVICE:
+                x = x.to(self.RUN_DEVICE)
 
             if state == None:
                 state = torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE)
