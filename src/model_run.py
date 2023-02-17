@@ -90,14 +90,14 @@ class RWKV_RNN(MyModule):
                     shape = f"  {str(shape[0]).rjust(5)} {str(shape[1]).rjust(5)}"
                 else:
                     shape = f"  {str(shape[0]).rjust(5)}      "
-                # if block_id == 0:
-                if print_need_newline:
-                    print('\n', end = '')
-                    print_need_newline = False
-                print(x.ljust(32), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device, shape)
-                # else:
-                #     print_need_newline = True
-                #     print('.', end = '', flush = True)
+                if block_id == 0 or cur_gpu_id != self.layer_device_map[block_id-1]:
+                    if print_need_newline:
+                        print('\n', end = '')
+                        print_need_newline = False
+                    print(x.ljust(32), str(w[x].dtype).replace('torch.', '').ljust(10), w[x].device, shape)
+                else:
+                    print_need_newline = True
+                    print('.', end = '', flush = True)
         print(f'\nn_layer {args.n_layer} n_embd {args.n_embd} ctx_len {args.ctx_len}')
 
         keys = list(w.keys()) # store weights in self.w
