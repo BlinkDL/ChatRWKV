@@ -49,7 +49,6 @@ class RWKV_RNN(MyModule):
             layer_ids = set([int(x.split('.')[1]) if ('blocks.' in x) else 0 for x in keys])
             layer_shard = math.ceil(len(layer_ids) / args.NUM_PARA_GPUS)
             self.layer_device_map = [None for _ in layer_ids]
-            print(layer_ids, layer_shard)
             for x in keys:
                 w[x].requires_grad = False
                 if x == 'emb.weight' or 'ln0' in x:
