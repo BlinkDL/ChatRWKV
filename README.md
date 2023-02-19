@@ -11,13 +11,15 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **Twitter:** https://twitter.com/BlinkDL_AI
 
+Demo: https://huggingface.co/spaces/yahma/rwkv-14b
+
 Cool Community RWKV Projects:
 
 https://pypi.org/project/rwkvstic/ Easy pip package (with 8bit & offload for low VRAM GPUs)
 
-https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
-
 https://github.com/gururise/rwkv_gradio RWKV Gradio
+
+https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
 
 ![RWKV-eval](RWKV-eval.png)
 
