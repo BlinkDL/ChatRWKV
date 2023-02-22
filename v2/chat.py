@@ -12,7 +12,7 @@ except:
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
 args = types.SimpleNamespace()
 
-print('\n\nChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
+print('\n\nChatRWKV v2 (!!! WIP, might be buggy !!!) https://github.com/BlinkDL/ChatRWKV')
 
 import torch
 torch.backends.cudnn.benchmark = True
@@ -28,10 +28,23 @@ torch.backends.cuda.matmul.allow_tf32 = True
 # torch._C._jit_set_nvfuser_enabled(False)
 
 ########################################################################################################
+#
+# use '/' in model path, instead of '\'
+#
+# can split the model to two devices (cpu/cuda/cuda:0/cuda:1/...) and set dtype for each of them
+# the first [DEVICE_1_NUMBER_OF_LAYERS] layers goes to [DEVICE_1]
+#
+# fp16 - good for GPU, DOES NOT support CPU
+# fp32 - good for CPU
+# bf16 - worse accuracy, supports CPU
+#
+########################################################################################################
 
-args.RUN_DEVICE = "cuda"  # cuda // cpu
-# fp16 (good for GPU, does NOT support CPU) // fp32 (good for CPU) // bf16 (worse accuracy, supports CPU)
-args.FLOAT_MODE = "fp16"
+args.DEVICE_1 = "cuda" # cpu/cuda/cuda:0/cuda:1/...
+args.DTYPE_1 = "fp16"  # fp16/fp32/bf16
+args.DEVICE_2 = "cuda" # cpu/cuda/cuda:0/cuda:1/...
+args.DTYPE_2 = "fp16"  # fp16/fp32/bf16
+args.DEVICE_1_NUMBER_OF_LAYERS = 999 # can split the model if less than the number of layers
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 
@@ -73,11 +86,9 @@ AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
-os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
-print(f'\nLoading ChatRWKV - {CHAT_LANG} - {args.RUN_DEVICE} - {args.FLOAT_MODE} - QA_PROMPT {QA_PROMPT}')
-
-from src.model_run import RWKV_RNN
-from src.utils import TOKENIZER
+print(f'\n{CHAT_LANG} - {args.DEVICE_1} {args.DTYPE_1} & {args.DEVICE_2} {args.DTYPE_2} (split at {args.DEVICE_1_NUMBER_OF_LAYERS}) - QA_PROMPT {QA_PROMPT}')
+from rwkv.model import RWKV
+from rwkv.utils import TOKENIZER
 tokenizer = TOKENIZER("20B_tokenizer.json")
 
 args.vocab_size = 50277
@@ -203,7 +214,7 @@ The following is a verbose and detailed conversation between an AI assistant cal
 # Load Model
 
 print(f'Loading model - {MODEL_NAME}')
-model = RWKV_RNN(args)
+model = RWKV(model=args.MODEL_NAME, dev1=args.DEVICE_1, dtype1=args.DTYPE_1, dev2=args.DEVICE_2, dtype2=args.DTYPE_2, dev1_layers=args.DEVICE_1_NUMBER_OF_LAYERS)
 
 model_tokens = []
 model_state = None
@@ -428,7 +439,8 @@ def on_message(message):
         save_all_stat(srv, 'chat', out)
 
 print(HELP_MSG)
-print(f'Ready - {CHAT_LANG} {args.RUN_DEVICE} {args.FLOAT_MODE} QA_PROMPT={QA_PROMPT} {args.MODEL_NAME}\n')
+print(f'{CHAT_LANG} - {args.DEVICE_1} {args.DTYPE_1} & {args.DEVICE_2} {args.DTYPE_2} (split at {args.DEVICE_1_NUMBER_OF_LAYERS}) - QA_PROMPT {QA_PROMPT}')
+print(f'Ready - {args.MODEL_NAME}\n')
 
 while True:
     msg = prompt(f'{user}{interface} ')
