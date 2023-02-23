@@ -29,22 +29,25 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 ########################################################################################################
 #
-# use '/' in model path, instead of '\'
+# Use '/' in model path, instead of '\'
 #
-# can split the model to two devices (cpu/cuda/cuda:0/cuda:1/...) and set dtype for each of them
-# the first [DEVICE_1_NUMBER_OF_LAYERS] layers goes to [DEVICE_1]
+# fp16 : good for GPU (!!! DOES NOT support CPU !!!)
+# fp32 : good for CPU
+# bf16 : worse accuracy, supports CPU
 #
-# fp16 - good for GPU, DOES NOT support CPU
-# fp32 - good for CPU
-# bf16 - worse accuracy, supports CPU
+# Strategy examples: (device = cpu/cuda/cuda:0/cuda:1/...)
+# 'cpu fp32' : everything on cpu fp32
+# 'cuda fp16' : everything on cuda fp16
+# 'cuda fp16 *6 -> cpu fp32' : first 6 layers on cuda fp16, then on cpu fp32
+# 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' : first 10 layers on cuda:0 fp16, then 8 layers on cuda:1 fp16, then on cpu fp32
+# 
+# Here we consider [ln_out+head] to be an extra layer, so L12-D768 model has "13" layers, L24-D2048 model has "25" layers, etc.
 #
 ########################################################################################################
 
-args.DEVICE_1 = "cuda" # cpu/cuda/cuda:0/cuda:1/...
-args.DTYPE_1 = "fp16"  # fp16/fp32/bf16
-args.DEVICE_2 = "cpu" # cpu/cuda/cuda:0/cuda:1/...
-args.DTYPE_2 = "fp32"  # fp16/fp32/bf16
-args.DEVICE_1_NUMBER_OF_LAYERS = 16 # can split the model if less than the number of layers
+# args.strategy = 'cpu fp32'
+args.strategy = 'cuda fp16'
+# args.strategy = 'cuda fp16 *8 -> cpu fp32'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 
@@ -71,7 +74,7 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-671-ctx2048-20230216'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-837'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/3-run1z/rwkv-711'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-671'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-2094'
 
 args.ctx_len = 1024
 
@@ -86,7 +89,7 @@ AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
-print(f'\n{CHAT_LANG} - {args.DEVICE_1} {args.DTYPE_1} & {args.DEVICE_2} {args.DTYPE_2} (split at {args.DEVICE_1_NUMBER_OF_LAYERS}) - QA_PROMPT {QA_PROMPT}')
+print(f'\n{CHAT_LANG} - {args.strategy} - QA_PROMPT {QA_PROMPT}')
 from rwkv.model import RWKV
 from rwkv.utils import TOKENIZER
 tokenizer = TOKENIZER("20B_tokenizer.json")
@@ -214,7 +217,7 @@ The following is a verbose and detailed conversation between an AI assistant cal
 # Load Model
 
 print(f'Loading model - {MODEL_NAME}')
-model = RWKV(model=args.MODEL_NAME, dev1=args.DEVICE_1, dtype1=args.DTYPE_1, dev2=args.DEVICE_2, dtype2=args.DTYPE_2, dev1_layers=args.DEVICE_1_NUMBER_OF_LAYERS)
+model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
 
 model_tokens = []
 model_state = None
@@ -437,8 +440,7 @@ def on_message(message):
         save_all_stat(srv, 'chat', out)
 
 print(HELP_MSG)
-print(f'{CHAT_LANG} - {args.DEVICE_1} {args.DTYPE_1} & {args.DEVICE_2} {args.DTYPE_2} (split at {args.DEVICE_1_NUMBER_OF_LAYERS}) - QA_PROMPT {QA_PROMPT}')
-print(f'Ready - {args.MODEL_NAME}')
+print(f'{CHAT_LANG} - {args.MODEL_NAME} - {args.strategy}')
 
 print(f'{tokenizer.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
 

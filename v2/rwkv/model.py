@@ -32,17 +32,17 @@ def get_dtype(dtype):
     return dtype
 
 class RWKV(MyModule):
-    def __init__(self, model, dev1, dtype1, dev2, dtype2, dev1_layers):
+    def __init__(self, model, strategy):
         super().__init__()
         self.args = types.SimpleNamespace()
         args = self.args
         args.MODEL_NAME = model
-
-        # for fp16 mode: set x = x/2 every X layer (to avoid overflow)
-        self.RESCALE_LAYER = 6 if ((get_dtype(dtype2) == torch.float16) or (get_dtype(dtype1) == torch.float16)) else 0
+        
+        # Rescale for fp16 mode: set x = x/2 every X layer (to avoid overflow)
+        self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
         print(f'\nRWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
 
-        # we will load model to CPU first
+        # We will load model to CPU first
         args.MODEL_NAME = args.MODEL_NAME.strip()
         if not args.MODEL_NAME.endswith('.pth'):
             args.MODEL_NAME += '.pth'
@@ -57,19 +57,55 @@ class RWKV(MyModule):
                 w['emb.weight'] = F.layer_norm(w['emb.weight'].float(), (args.n_embd,), weight=w['blocks.0.ln0.weight'].float(), bias=w['blocks.0.ln0.bias'].float())
             del w['blocks.0.ln0.weight']
             del w['blocks.0.ln0.bias']
+
             keys = list(w.keys())
             args.n_layer = 0
             for x in keys:
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 args.n_layer = max(args.n_layer, layer_id+1)
+
+            # Compute strategy
+            s = [x.strip().split(' ') for x in strategy.split('->')]
+            plan = [0] * len(s)
+            to_allocate = args.n_layer + 1
+            allocated = 0
+            free_slots = 0
+            for i in range(len(s)):
+                if len(s[i]) > 2:
+                    assert s[i][2].startswith('*')
+                    plan[i] = int(s[i][2][1:])
+                    allocated += plan[i]
+                    if allocated >= to_allocate:
+                        plan[i] += to_allocate - allocated
+                        break
+                else:
+                    free_slots += 1
+            if free_slots > 0 and to_allocate > allocated:
+                for i in range(len(s)):
+                    if plan[i] == 0:
+                        plan[i] = (to_allocate - allocated) // free_slots
+                        allocated += plan[i]
+                        free_slots -= 1
+            if to_allocate > allocated:
+                plan[len(s)-1] += to_allocate - allocated
+            print(f'Strategy: (total {args.n_layer}+1={args.n_layer+1} layers)')
+            for i in range(len(s)):
+                ss = s[i]
+                print(f'* {ss[0]} {ss[1]}, store {plan[i]} layers')
+                plan[i] += (0 if i == 0 else plan[i-1])
+                s[i][1] = get_dtype(s[i][1])
+            # Load weights
             print_need_newline = False
             for x in keys:
                 w[x].requires_grad = False
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
-                    layer_id = args.n_layer - 1
-                DEVICE = dev1 if layer_id < dev1_layers else dev2
-                DTYPE = get_dtype(dtype1) if layer_id < dev1_layers else get_dtype(dtype2)
+                    layer_id = args.n_layer
+                for i in range(len(s)):
+                    if layer_id < plan[i]:
+                        DEVICE = s[i][0]
+                        DTYPE = s[i][1]
+                        break
                 
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
@@ -99,7 +135,7 @@ class RWKV(MyModule):
                     shape = f" {str(shape[0]).rjust(5)} {str(shape[1]).rjust(5)}"
                 else:
                     shape = f" {str(shape[0]).rjust(5)}      "
-                if layer_id == 0 or layer_id == args.n_layer-1:
+                if layer_id == 0 or layer_id >= args.n_layer-1:
                     if print_need_newline:
                         print('\n', end = '')
                         print_need_newline = False
@@ -232,8 +268,7 @@ class RWKV(MyModule):
                     kw=w[f'{att}key.weight'],
                     vw=w[f'{att}value.weight'],
                     rw=w[f'{att}receptance.weight'],
-                    ow=w[f'{att}output.weight'],
-                    )
+                    ow=w[f'{att}output.weight'])
 
                 x = x.to(dtype=w[f'{ffn}key.weight'].dtype, device=w[f'{ffn}key.weight'].device)
                 x, state[i*5+4] = FFN(
@@ -247,7 +282,8 @@ class RWKV(MyModule):
                 if self.RESCALE_LAYER > 0:
                     if (i+1) % self.RESCALE_LAYER == 0:
                         x = x / 2
-                
+            
+            x = x.to(dtype=w['ln_out.weight'].dtype, device=w['ln_out.weight'].device)
             x = F.layer_norm(x[-1,:] if seq_mode else x, (args.n_embd,), weight=w['ln_out.weight'], bias=w['ln_out.bias'])
             x = w['head.weight'] @ x
 

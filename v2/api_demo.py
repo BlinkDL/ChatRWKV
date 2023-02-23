@@ -23,16 +23,23 @@ tokenizer = TOKENIZER("20B_tokenizer.json")
 
 ########################################################################################################
 #
-# use '/' in model path, instead of '\'
+# Use '/' in model path, instead of '\'
 #
-# can split the model to two devices (cpu/cuda/cuda:0/cuda:1/...) and set dtype for each of them
-# the first [dev1_layers] layers goes to [dev1]
+# fp16 : good for GPU (!!! DOES NOT support CPU !!!)
+# fp32 : good for CPU
+# bf16 : worse accuracy, supports CPU
 #
-# fp16 - good for GPU, DOES NOT support CPU
-# fp32 - good for CPU
-# bf16 - worse accuracy, supports CPU
+# Strategy examples: (device = cpu/cuda/cuda:0/cuda:1/...)
+# 'cpu fp32' : everything on cpu fp32
+# 'cuda fp16' : everything on cuda fp16
+# 'cuda fp16 *6 -> cpu fp32' : first 6 layers on cuda fp16, then on cpu fp32
+# 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' : first 10 layers on cuda:0 fp16, then 8 layers on cuda:1 fp16, then on cpu fp32
+# 
+# Here we consider [ln_out+head] to be an extra layer, so L12-D768 model has "13" layers, L24-D2048 model has "25" layers, etc.
 #
-model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', dev1='cpu', dtype1='fp32', dev2='cuda', dtype2='fp16', dev1_layers=6)
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cpu fp32')
+model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16 *8 -> cpu fp32')
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda:0 fp16 -> cuda:1 fp16 -> cpu fp32 *1')
 
 out, state = model.forward([187, 510, 1563, 310, 247], None)
 print(out.detach().cpu().numpy())
