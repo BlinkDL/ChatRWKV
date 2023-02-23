@@ -126,7 +126,8 @@ class RWKV(MyModule):
                         w[x] = w[x] / (2 ** int(layer_id // self.RESCALE_LAYER))
                 
                 if (DEVICE == 'cpu') or ('emb.' in x):
-                    w[x] = w[x].pin_memory()
+                    # w[x] = w[x].pin_memory()
+                    pass
                 else:
                     w[x] = w[x].to(device=DEVICE)
 
@@ -242,11 +243,11 @@ class RWKV(MyModule):
                     dtype_att = w[f'blocks.{i}.att.key.weight'].dtype
                     dev_ffn = w[f'blocks.{i}.ffn.key.weight'].device
                     dtype_ffn = w[f'blocks.{i}.ffn.key.weight'].dtype
-                    state[i*5+0] = torch.zeros(args.n_embd, dtype=dtype_att, requires_grad=False, pin_memory=(dev_att==torch.device('cpu')), device=dev_att)
-                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, pin_memory=(dev_att==torch.device('cpu')), device=dev_att)
-                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, pin_memory=(dev_att==torch.device('cpu')), device=dev_att)
-                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, pin_memory=(dev_att==torch.device('cpu')), device=dev_att) - 1e30
-                    state[i*5+4] = torch.zeros(args.n_embd, dtype=dtype_ffn, requires_grad=False, pin_memory=(dev_ffn==torch.device('cpu')), device=dev_ffn)
+                    state[i*5+0] = torch.zeros(args.n_embd, dtype=dtype_att, requires_grad=False, device=dev_att)
+                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att)
+                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att)
+                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att) - 1e30
+                    state[i*5+4] = torch.zeros(args.n_embd, dtype=dtype_ffn, requires_grad=False, device=dev_ffn)
 
             seq_mode = len(tokens) > 1
             ATT = self.att_seq if seq_mode else self.att_one
