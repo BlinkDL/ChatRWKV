@@ -59,7 +59,12 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 
-# Note: it's slow (not optimized yet) when your prompt is long. Better keep it as short as possible (for now).
+########################################################################################################
+#
+# 1. It's slow (not optimized yet) when your prompt is long. Better keep it as short as possible (for now).
+# 2. Reuse the state (use deepcopy to clone it) when you are running the same prompt multiple times. 
+# 3. Use ctx4096 models if you need long ctx.
+# 
 def generate(prompt, max_new_tokens, state=None):
     out = ''
     all_tokens = []
