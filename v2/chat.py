@@ -42,9 +42,9 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 args.DEVICE_1 = "cuda" # cpu/cuda/cuda:0/cuda:1/...
 args.DTYPE_1 = "fp16"  # fp16/fp32/bf16
-args.DEVICE_2 = "cuda" # cpu/cuda/cuda:0/cuda:1/...
-args.DTYPE_2 = "fp16"  # fp16/fp32/bf16
-args.DEVICE_1_NUMBER_OF_LAYERS = 999 # can split the model if less than the number of layers
+args.DEVICE_2 = "cpu" # cpu/cuda/cuda:0/cuda:1/...
+args.DTYPE_2 = "fp32"  # fp16/fp32/bf16
+args.DEVICE_1_NUMBER_OF_LAYERS = 16 # can split the model if less than the number of layers
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 
@@ -273,8 +273,6 @@ srv_list = ['dummy_server']
 for s in srv_list:
     save_all_stat(s, 'chat', out)
 
-print(f'### prompt ###\n[{tokenizer.decode(model_tokens)}]\n')
-
 def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
 
@@ -440,7 +438,9 @@ def on_message(message):
 
 print(HELP_MSG)
 print(f'{CHAT_LANG} - {args.DEVICE_1} {args.DTYPE_1} & {args.DEVICE_2} {args.DTYPE_2} (split at {args.DEVICE_1_NUMBER_OF_LAYERS}) - QA_PROMPT {QA_PROMPT}')
-print(f'Ready - {args.MODEL_NAME}\n')
+print(f'Ready - {args.MODEL_NAME}')
+
+print(f'{tokenizer.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
 
 while True:
     msg = prompt(f'{user}{interface} ')

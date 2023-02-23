@@ -262,8 +262,6 @@ srv_list = ['dummy_server']
 for s in srv_list:
     save_all_stat(s, 'chat', out)
 
-print(f'### prompt ###\n[{tokenizer.decode(model_tokens)}]\n')
-
 def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
 
@@ -428,7 +426,9 @@ def on_message(message):
         save_all_stat(srv, 'chat', out)
 
 print(HELP_MSG)
-print(f'Ready - {CHAT_LANG} {args.RUN_DEVICE} {args.FLOAT_MODE} QA_PROMPT={QA_PROMPT} {args.MODEL_NAME}\n')
+print(f'Ready - {CHAT_LANG} {args.RUN_DEVICE} {args.FLOAT_MODE} QA_PROMPT={QA_PROMPT} {args.MODEL_NAME}')
+
+print(f'{tokenizer.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
 
 while True:
     msg = prompt(f'{user}{interface} ')
