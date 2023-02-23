@@ -52,19 +52,28 @@ model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-202209
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16 *6+')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019', strategy='cuda fp16 *0+ -> cpu fp32 *1')
 
-out, state = model.forward([187, 510, 1563, 310, 247], None)
-print(out.detach().cpu().numpy())
-out, state = model.forward([187], None)
-print(out.detach().cpu().numpy())
-out, state = model.forward([510, 1563], state)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())
-out, state = model.forward([187], None)
-out, state = model.forward([510, 1563, 310, 247], state)
-print(out.detach().cpu().numpy())
+out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
+print(out.detach().cpu().numpy())                   # get logits
 out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)
+out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
 out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())
+print(out.detach().cpu().numpy())                   # same result as above
 
-input('done. press Ctrl+C to exit')
+def generate(prompt, max_new_tokens, state=None):
+    out = ''
+    all_tokens = []
+    for i in range(max_new_tokens):
+        out, state = model.forward(tokenizer.encode(prompt) if i == 0 else [token], state)
+        token = tokenizer.sample_logits(out, None, None, temperature=1.0, top_p=0.8)
+        all_tokens += [token]
+        tmp = tokenizer.decode(all_tokens)
+        if '\ufffd' not in tmp: # is it a valid utf-8 string?
+            out = tmp
+    return out
+
+prompt = "What I would like to say is: "
+print(prompt, end='')
+completion = generate(prompt, max_new_tokens=20)
+print(completion)
+
+# input('done. press Ctrl+C to exit')
