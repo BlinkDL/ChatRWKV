@@ -1,7 +1,7 @@
 # ChatRWKV
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :)
 
-**Please upgrade to latest code. Got a bug in computation in earlier version.**
+**ChatRWKV v2:** with "stream" and "split" strategies. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
@@ -10,8 +10,6 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 **RWKV Discord:** https://discord.gg/bDSBUMeFpc (let's build together)
 
 **Twitter:** https://twitter.com/BlinkDL_AI
-
-**ChatRWKV v2:** with "stream" and "split" strategies. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 
 Demo: https://huggingface.co/spaces/yahma/rwkv-14b
 
