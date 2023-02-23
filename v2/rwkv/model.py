@@ -22,15 +22,6 @@ except:
 
 ########################################################################################################
 
-def get_dtype(dtype):
-    if dtype == 'fp32':
-        return torch.float
-    elif dtype == 'fp16':
-        return torch.float16
-    elif dtype == 'bf16':
-        return torch.bfloat16
-    return dtype
-
 class RWKV(MyModule):
     def __init__(self, model, strategy):
         super().__init__()
@@ -40,7 +31,7 @@ class RWKV(MyModule):
         
         # Rescale for fp16 mode: set x = x/2 every X layer (to avoid overflow)
         self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
-        print(f'\nRWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
+        print(f'RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
 
         # We will load model to CPU first
         args.MODEL_NAME = args.MODEL_NAME.strip()
@@ -67,33 +58,68 @@ class RWKV(MyModule):
             # Compute strategy
             s = [x.strip().split(' ') for x in strategy.split('->')]
             plan = [0] * len(s)
+            stream_i = -1
+            stream_count = 0
             to_allocate = args.n_layer + 1
             allocated = 0
             free_slots = 0
             for i in range(len(s)):
+                if s[i][1] == 'fp32':
+                    s[i][1] = torch.float
+                elif s[i][1] == 'fp16':
+                    s[i][1] = torch.float16
+                elif s[i][1] == 'bf16':
+                    s[i][1] = torch.bfloat16
                 if len(s[i]) > 2:
-                    assert s[i][2].startswith('*')
-                    plan[i] = int(s[i][2][1:])
+                    ss = s[i][2]
+                    assert ss.startswith('*')
+                    if ss.endswith('+'):
+                        plan[i] = int(ss[1:-1])
+                        stream_i = i
+                    else:
+                        plan[i] = int(ss[1:])
                     allocated += plan[i]
                     if allocated >= to_allocate:
                         plan[i] += to_allocate - allocated
                         break
                 else:
                     free_slots += 1
-            if free_slots > 0 and to_allocate > allocated:
-                for i in range(len(s)):
-                    if plan[i] == 0:
-                        plan[i] = (to_allocate - allocated) // free_slots
-                        allocated += plan[i]
-                        free_slots -= 1
-            if to_allocate > allocated:
-                plan[len(s)-1] += to_allocate - allocated
+            if stream_i < 0:
+                if free_slots > 0 and to_allocate > allocated:
+                    for i in range(len(s)):
+                        if plan[i] == 0:
+                            plan[i] = (to_allocate - allocated) // free_slots
+                            allocated += plan[i]
+                            free_slots -= 1
+                if to_allocate > allocated:
+                    plan[len(s)-1] += to_allocate - allocated
+            else:
+                if to_allocate > allocated:
+                    stream_count = to_allocate - allocated
+                    plan[stream_i] += stream_count
             print(f'Strategy: (total {args.n_layer}+1={args.n_layer+1} layers)')
             for i in range(len(s)):
                 ss = s[i]
-                print(f'* {ss[0]} {ss[1]}, store {plan[i]} layers')
+                if i != stream_i:
+                    print(f'* {ss[0]} {ss[1]}, store {plan[i]} layers')
+                else:
+                    print(f'* {ss[0]} {ss[1]}, store {plan[i]-stream_count} layers, stream {stream_count} layers')
                 plan[i] += (0 if i == 0 else plan[i-1])
-                s[i][1] = get_dtype(s[i][1])
+            self.strategy = [None] * (args.n_layer + 1)
+            strategy = self.strategy
+            for n in range(args.n_layer + 1):
+                for i in range(len(s)):
+                    if n < plan[i]:
+                        strategy[n] = types.SimpleNamespace()
+                        strategy[n].device = s[i][0]
+                        strategy[n].dtype = s[i][1]
+                        strategy[n].stream = False
+                        if i == stream_i and n - (0 if i == 0 else plan[i-1]) >= (plan[i] - stream_count):
+                            strategy[n].stream = True
+                        break
+                print(f"{n}-{strategy[n].device}-{str(strategy[n].dtype).replace('torch.','')}{'-stream' if strategy[n].stream else ''}",end=' ')
+            print()
+
             # Load weights
             print_need_newline = False
             for x in keys:
@@ -101,11 +127,9 @@ class RWKV(MyModule):
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
                     layer_id = args.n_layer
-                for i in range(len(s)):
-                    if layer_id < plan[i]:
-                        DEVICE = s[i][0]
-                        DTYPE = s[i][1]
-                        break
+                dd = strategy[layer_id]
+                DEVICE = dd.device
+                DTYPE = dd.dtype
                 
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
@@ -125,10 +149,11 @@ class RWKV(MyModule):
                     if 'ffn.value.weight' in x:
                         w[x] = w[x] / (2 ** int(layer_id // self.RESCALE_LAYER))
                 
-                if (DEVICE == 'cpu') or ('emb.' in x):
-                    # w[x] = w[x].pin_memory()
+                if 'emb.' in x:
                     pass
-                else:
+                elif (dd.stream) and (('key.weight' in x) or ('value.weight' in x) or ('receptance.weight' in x) or ('output.weight' in x)):
+                    w[x] = w[x].pin_memory()
+                elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE)
 
                 shape = [i for i in w[x].shape if i != 1]
@@ -142,7 +167,7 @@ class RWKV(MyModule):
                         print_need_newline = False
                     dt = str(w[x].dtype).replace('torch.', '')
                     dt = dt.replace('float32', 'fp32').replace('bfloat16', 'bf16').replace('float16', 'fp16')
-                    print(x.ljust(32), dt, str(w[x].device).rjust(8), shape)
+                    print(x.ljust(32), dt, str(w[x].device).rjust(8), shape, ' (pinned)' if w[x].is_pinned() else '')
                 else:
                     print_need_newline = True
                     print('.', end = '', flush = True)
@@ -239,15 +264,14 @@ class RWKV(MyModule):
             if state == None:
                 state = [None] * args.n_layer * 5
                 for i in range(args.n_layer): # state: 0=att_xx 1=att_aa 2=att_bb 3=att_pp 4=ffn_xx
-                    dev_att = w[f'blocks.{i}.att.key.weight'].device
-                    dtype_att = w[f'blocks.{i}.att.key.weight'].dtype
-                    dev_ffn = w[f'blocks.{i}.ffn.key.weight'].device
-                    dtype_ffn = w[f'blocks.{i}.ffn.key.weight'].dtype
-                    state[i*5+0] = torch.zeros(args.n_embd, dtype=dtype_att, requires_grad=False, device=dev_att)
-                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att)
-                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att)
-                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev_att) - 1e30
-                    state[i*5+4] = torch.zeros(args.n_embd, dtype=dtype_ffn, requires_grad=False, device=dev_ffn)
+                    dd = self.strategy[i]
+                    dev = dd.device
+                    dtype = dd.dtype
+                    state[i*5+0] = torch.zeros(args.n_embd, dtype=dtype, requires_grad=False, device=dev)
+                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev)
+                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev)
+                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev) - 1e30
+                    state[i*5+4] = torch.zeros(args.n_embd, dtype=dtype, requires_grad=False, device=dev)
 
             seq_mode = len(tokens) > 1
             ATT = self.att_seq if seq_mode else self.att_one
@@ -259,32 +283,62 @@ class RWKV(MyModule):
                 bbb = f'blocks.{i}.'
                 att = f'blocks.{i}.att.'
                 ffn = f'blocks.{i}.ffn.'
+                dd = self.strategy[i]
+                dev = dd.device
+                dtype = dd.dtype
 
-                x = x.to(dtype=w[f'{att}key.weight'].dtype, device=w[f'{att}key.weight'].device)
-                x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
-                    x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
-                    ln_w=w[f'{bbb}ln1.weight'], ln_b=w[f'{bbb}ln1.bias'],
-                    k_mix=w[f'{att}time_mix_k'], v_mix=w[f'{att}time_mix_v'], r_mix=w[f'{att}time_mix_r'],
-                    t_decay = w[f'{att}time_decay'], t_first = w[f'{att}time_first'],
-                    kw=w[f'{att}key.weight'],
-                    vw=w[f'{att}value.weight'],
-                    rw=w[f'{att}receptance.weight'],
-                    ow=w[f'{att}output.weight'])
-
-                x = x.to(dtype=w[f'{ffn}key.weight'].dtype, device=w[f'{ffn}key.weight'].device)
-                x, state[i*5+4] = FFN(
-                    x, sx=state[i*5+4],
-                    ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
-                    k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
-                    kw=w[f'{ffn}key.weight'],
-                    vw=w[f'{ffn}value.weight'],
-                    rw=w[f'{ffn}receptance.weight'])
+                x = x.to(dtype=dtype, device=dev)
+                if dd.stream:
+                    kw = w[f'{att}key.weight'].to(device=dev, non_blocking=True)
+                    vw = w[f'{att}value.weight'].to(device=dev, non_blocking=True)
+                    rw = w[f'{att}receptance.weight'].to(device=dev, non_blocking=True)
+                    ow = w[f'{att}output.weight'].to(device=dev, non_blocking=True)
+                    x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
+                        x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
+                        ln_w=w[f'{bbb}ln1.weight'], ln_b=w[f'{bbb}ln1.bias'],
+                        k_mix=w[f'{att}time_mix_k'], v_mix=w[f'{att}time_mix_v'], r_mix=w[f'{att}time_mix_r'],
+                        t_decay = w[f'{att}time_decay'], t_first = w[f'{att}time_first'],
+                        kw=kw, vw=vw, rw=rw, ow=ow)
+                    del kw
+                    del vw
+                    del rw
+                    del ow
+                else:
+                    x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
+                        x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
+                        ln_w=w[f'{bbb}ln1.weight'], ln_b=w[f'{bbb}ln1.bias'],
+                        k_mix=w[f'{att}time_mix_k'], v_mix=w[f'{att}time_mix_v'], r_mix=w[f'{att}time_mix_r'],
+                        t_decay = w[f'{att}time_decay'], t_first = w[f'{att}time_first'],
+                        kw=w[f'{att}key.weight'],
+                        vw=w[f'{att}value.weight'],
+                        rw=w[f'{att}receptance.weight'],
+                        ow=w[f'{att}output.weight'])
+                if dd.stream:
+                    kw = w[f'{ffn}key.weight'].to(device=dev, non_blocking=True)
+                    vw = w[f'{ffn}value.weight'].to(device=dev, non_blocking=True)
+                    rw = w[f'{ffn}receptance.weight'].to(device=dev, non_blocking=True)
+                    x, state[i*5+4] = FFN(
+                        x, sx=state[i*5+4],
+                        ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
+                        k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
+                        kw=kw, vw=vw, rw=rw)
+                    del kw
+                    del vw
+                    del rw                        
+                else:
+                    x, state[i*5+4] = FFN(
+                        x, sx=state[i*5+4],
+                        ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
+                        k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
+                        kw=w[f'{ffn}key.weight'],
+                        vw=w[f'{ffn}value.weight'],
+                        rw=w[f'{ffn}receptance.weight'])
 
                 if self.RESCALE_LAYER > 0:
                     if (i+1) % self.RESCALE_LAYER == 0:
                         x = x / 2
             
-            x = x.to(dtype=w['ln_out.weight'].dtype, device=w['ln_out.weight'].device)
+            x = x.to(dtype=self.strategy[args.n_layer].dtype, device=self.strategy[args.n_layer].device)
             x = F.layer_norm(x[-1,:] if seq_mode else x, (args.n_embd,), weight=w['ln_out.weight'], bias=w['ln_out.bias'])
             x = w['head.weight'] @ x
 
