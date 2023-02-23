@@ -11,7 +11,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **Twitter:** https://twitter.com/BlinkDL_AI
 
-**ChatRWKV v2:** Optimized for low VRAM GPUs (WIP) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
+**ChatRWKV v2:** https://github.com/BlinkDL/ChatRWKV/tree/main/v2 supports "strategy" to run a large RWKV on 1 or more small VRAM GPUs.
 
 Demo: https://huggingface.co/spaces/yahma/rwkv-14b
 
