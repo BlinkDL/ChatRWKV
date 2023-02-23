@@ -4,7 +4,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 **ChatRWKV v2:** with "stream" and "split" strategies. **3G VRAM is enough to run RWKV 14B :)** https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 ```
 os.environ["RWKV_JIT_ON"] = '1'
-from rwkv.model import RWKV
+from rwkv.model import RWKV                         # everything in /v2/rwkv folder
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16')
 
 out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
