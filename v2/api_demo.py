@@ -59,6 +59,7 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 
+# Note: it's slow (not optimized yet) when your prompt is long. Better keep it as short as possible (for now).
 def generate(prompt, max_new_tokens, state=None):
     out = ''
     all_tokens = []
