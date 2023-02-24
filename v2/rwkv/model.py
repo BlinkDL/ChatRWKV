@@ -156,7 +156,6 @@ class RWKV(MyModule):
                         w[x] = w[x].pin_memory() # if you see "CUDA error: out of memory" here, that's out of CPU RAM, not VRAM. Get more RAM :)
                     except:
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
-                        pass
                 elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE)
 

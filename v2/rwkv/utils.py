@@ -8,18 +8,9 @@ import torch
 from torch.nn import functional as F
 from tokenizers import Tokenizer
 
-time_slot = {}
-time_ref = time.time_ns()
-
-def record_time(name):
-    if name not in time_slot:
-        time_slot[name] = 1e20
-    tt = (time.time_ns() - time_ref) / 1e9
-    if tt < time_slot[name]:
-        time_slot[name] = tt
-
-class TOKENIZER():
-    def __init__(self, WORD_NAME):
+class PIPELINE():
+    def __init__(self, model, WORD_NAME):
+        self.model = model
         self.tokenizer = Tokenizer.from_file(WORD_NAME)
 
     def refine_context(self, context):
@@ -38,7 +29,7 @@ class TOKENIZER():
     def decode(self, x):
         return self.tokenizer.decode(x)
 
-    def sample_logits(self, logits, x, ctx_len, temperature=1.0, top_p=1.0):
+    def sample_logits(self, logits, temperature=1.0, top_p=1.0):
         probs = F.softmax(logits.float(), dim=-1)
 
         if probs.device == torch.device('cpu'):
@@ -61,3 +52,15 @@ class TOKENIZER():
                 probs = probs.pow(1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
             return int(out)
+    
+    def generate(self, prompt, max_new_tokens, state=None):
+        out = ''
+        all_tokens = []
+        for i in range(max_new_tokens):
+            out, state = self.model.forward(self.encode(prompt) if i == 0 else [token], state)
+            token = self.sample_logits(out, temperature=1.0, top_p=0.8)
+            all_tokens += [token]
+            tmp = self.decode(all_tokens)
+            if '\ufffd' not in tmp: # is it a valid utf-8 string?
+                out = tmp
+        return out

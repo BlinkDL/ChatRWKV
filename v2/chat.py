@@ -101,14 +101,8 @@ AVOID_REPEAT = '，。：？！'
 
 print(f'\n{CHAT_LANG} - {args.strategy} - QA_PROMPT {QA_PROMPT}')
 from rwkv.model import RWKV
-from rwkv.utils import TOKENIZER
-tokenizer = TOKENIZER("20B_tokenizer.json")
+from rwkv.utils import PIPELINE
 
-args.vocab_size = 50277
-args.head_qk = 0
-args.pre_ffn = 0
-args.grad_cp = 0
-args.my_pos_emb = 0
 MODEL_NAME = args.MODEL_NAME
 
 if CHAT_LANG == 'English':
@@ -238,13 +232,14 @@ The following is a verbose and detailed conversation between an AI assistant cal
 
 print(f'Loading model - {MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
+pipeline = PIPELINE(model, "20B_tokenizer.json")
 
 model_tokens = []
 model_state = None
 
 AVOID_REPEAT_TOKENS = []
 for i in AVOID_REPEAT:
-    dd = tokenizer.encode(i)
+    dd = pipeline.encode(i)
     assert len(dd) == 1
     AVOID_REPEAT_TOKENS += dd
 
@@ -257,7 +252,7 @@ def run_rnn(tokens, newline_adj = 0):
     model_tokens += tokens
     out, model_state = model.forward(tokens, model_state)
 
-    # print(f'### model ###\n{tokens}\n[{tokenizer.decode(model_tokens)}]')
+    # print(f'### model ###\n{tokens}\n[{pipeline.decode(model_tokens)}]')
 
     out[0] = -999999999  # disable <|endoftext|>
     out[187] += newline_adj # adjust \n probability
@@ -287,7 +282,7 @@ def load_all_stat(srv, name):
 # Run inference
 print(f'\nRun prompt...')
 
-out = run_rnn(tokenizer.encode(init_prompt))
+out = run_rnn(pipeline.encode(init_prompt))
 save_all_stat('', 'chat_init', out)
 gc.collect()
 torch.cuda.empty_cache()
@@ -305,9 +300,6 @@ def on_message(message):
     srv = 'dummy_server'
 
     msg = message.replace('\\n','\n').strip()
-    # if len(msg) > 1000:
-    #     reply_msg('your message is too long (max 1000 tokens)')
-    #     return
 
     x_temp = GEN_TEMP
     x_top_p = GEN_TOP_P
@@ -339,7 +331,7 @@ def on_message(message):
             # print(f'### prompt ###\n[{new}]')
             model_state = None
             model_tokens = []
-            out = run_rnn(tokenizer.encode(new))
+            out = run_rnn(pipeline.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:4].lower() == '+qq ':
@@ -347,7 +339,7 @@ def on_message(message):
             # print(f'### prompt ###\n[{new}]')
             model_state = None
             model_tokens = []
-            out = run_rnn(tokenizer.encode(new))
+            out = run_rnn(pipeline.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:4].lower() == '+qa ':
@@ -357,7 +349,7 @@ def on_message(message):
             new = f"{user}{interface} {real_msg}\n\n{bot}{interface}"
             # print(f'### qa ###\n[{new}]')
             
-            out = run_rnn(tokenizer.encode(new))
+            out = run_rnn(pipeline.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
         elif msg.lower() == '+++':
@@ -376,10 +368,8 @@ def on_message(message):
         begin = len(model_tokens)
         out_last = begin
         for i in range(FREE_GEN_LEN+100):
-            token = tokenizer.sample_logits(
+            token = pipeline.sample_logits(
                 out,
-                model_tokens,
-                args.ctx_len,
                 temperature=x_temp,
                 top_p=x_top_p,
             )
@@ -388,14 +378,14 @@ def on_message(message):
             else:
                 out = run_rnn([token])
             
-            xxx = tokenizer.decode(model_tokens[out_last:])
+            xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
                 if i >= FREE_GEN_LEN:
                     break
         print('\n')
-        # send_msg = tokenizer.decode(model_tokens[begin:]).strip()
+        # send_msg = pipeline.decode(model_tokens[begin:]).strip()
         # print(f'### send ###\n[{send_msg}]')
         # reply_msg(send_msg)
         save_all_stat(srv, 'gen_1', out)
@@ -410,7 +400,7 @@ def on_message(message):
             out = load_all_stat(srv, 'chat')
             new = f"{user}{interface} {msg}\n\n{bot}{interface}"
             # print(f'### add ###\n[{new}]')
-            out = run_rnn(tokenizer.encode(new), newline_adj=-999999999)
+            out = run_rnn(pipeline.encode(new), newline_adj=-999999999)
             save_all_stat(srv, 'chat_pre', out)
 
         begin = len(model_tokens)
@@ -425,26 +415,24 @@ def on_message(message):
                 newline_adj = 0
             else:
                 newline_adj = (i - CHAT_LEN_LONG) * 0.25 # MUST END THE GENERATION
-            token = tokenizer.sample_logits(
+            token = pipeline.sample_logits(
                 out,
-                model_tokens,
-                args.ctx_len,
                 temperature=x_temp,
                 top_p=x_top_p,
             )
             out = run_rnn([token], newline_adj=newline_adj)
 
-            xxx = tokenizer.decode(model_tokens[out_last:])
+            xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
             
-            send_msg = tokenizer.decode(model_tokens[begin:])
+            send_msg = pipeline.decode(model_tokens[begin:])
             if '\n\n' in send_msg:
                 send_msg = send_msg.strip()
                 break
             
-            # send_msg = tokenizer.decode(model_tokens[begin:]).strip()
+            # send_msg = pipeline.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
             #     send_msg = send_msg[:-len(f'{user}{interface}')].strip()
             #     break
@@ -453,7 +441,7 @@ def on_message(message):
             #     break
 
         # print(f'{model_tokens}')
-        # print(f'[{tokenizer.decode(model_tokens)}]')
+        # print(f'[{pipeline.decode(model_tokens)}]')
 
         # print(f'### send ###\n[{send_msg}]')
         # reply_msg(send_msg)
@@ -462,7 +450,7 @@ def on_message(message):
 print(HELP_MSG)
 print(f'{CHAT_LANG} - {args.MODEL_NAME} - {args.strategy}')
 
-print(f'{tokenizer.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
+print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
 
 while True:
     msg = prompt(f'{user}{interface} ')

@@ -18,8 +18,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 os.environ["RWKV_JIT_ON"] = '1'
 
 from rwkv.model import RWKV
-from rwkv.utils import TOKENIZER
-tokenizer = TOKENIZER("20B_tokenizer.json")
+from rwkv.utils import PIPELINE
 
 ########################################################################################################
 #
@@ -60,26 +59,20 @@ out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 
 ########################################################################################################
+
+pipeline = PIPELINE(model, "20B_tokenizer.json")
+
+prompt = "This is the best"
+print(prompt, end='')
+
+########################################################################################################
 #
 # 1. It's slow (not optimized yet) when your prompt is long. Better keep it as short as possible (for now).
 # 2. Reuse the state (use deepcopy to clone it) when you are running the same prompt multiple times. 
 # 3. Use ctx4096 models if you need long ctx.
 # 
-def generate(prompt, max_new_tokens, state=None):
-    out = ''
-    all_tokens = []
-    for i in range(max_new_tokens):
-        out, state = model.forward(tokenizer.encode(prompt) if i == 0 else [token], state)
-        token = tokenizer.sample_logits(out, None, None, temperature=1.0, top_p=0.8)
-        all_tokens += [token]
-        tmp = tokenizer.decode(all_tokens)
-        if '\ufffd' not in tmp: # is it a valid utf-8 string?
-            out = tmp
-    return out
+completion = pipeline.generate(prompt, max_new_tokens=20)
 
-prompt = "What I would like to say is: "
-print(prompt, end='')
-completion = generate(prompt, max_new_tokens=20)
 print(completion)
 
 # input('done. press Ctrl+C to exit')
