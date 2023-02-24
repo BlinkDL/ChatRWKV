@@ -99,67 +99,20 @@ print(f'\n{CHAT_LANG} - {args.strategy} - {PROMPT_FILE}')
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
 
-MODEL_NAME = args.MODEL_NAME
 with open(PROMPT_FILE, 'rb') as file:
+    user = None
+    bot = None
+    interface = None
+    init_prompt = None
     exec(compile(file.read(), PROMPT_FILE, 'exec'))
-    init_prompt = init_prompt.strip().split('\n')
-    for c in range(len(init_prompt)):
-        init_prompt[c] = init_prompt[c].strip().strip('\u3000').strip('\r')
-    init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
-
-if CHAT_LANG == 'English':
-    HELP_MSG = '''Commands:
-say something --> chat with bot. use \\n for new line.
-+ --> alternate chat reply
-+reset --> reset chat
-
-+gen YOUR PROMPT --> free generation with any prompt. use \\n for new line.
-+qa YOUR QUESTION --> free generation - ask any question (just ask the question). use \\n for new line.
-+++ --> continue last free generation (only for +gen / +qa)
-++ --> retry last free generation (only for +gen / +qa)
-
-Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B for best results.
-This is not instruct-tuned for conversation yet, so don't expect good quality. Better use +gen for free generation.
-
-Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
-'''
-elif CHAT_LANG == 'Chinese':        
-    HELP_MSG = f'''指令:
-直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
-+ --> 让机器人换个回答
-+reset --> 重置对话
-
-+gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
-+qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
-+qq 某某问题 --> 问独立的问题（忽略上下文），且敞开想象力，用\\n代表换行
-+++ --> 继续 +gen / +qa / +qq 的回答
-++ --> 换个 +gen / +qa / +qq 的回答
-
-作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
-如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
-现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
-目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
-注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
-
-请先试下列咒语，理解咒语的写法。咒语至关重要。
-
-中文网文【testNovel】模型，试下面这些，注意，必须是【testNovel】模型：
-+gen 这是一颗
-+gen 以下是不朽的科幻史诗长篇巨著，描写细腻，刻画了数百位个性鲜明的英雄和宏大的星际文明战争。\\n第一章
-+gen 这是一个修真世界，详细世界设定如下：\\n1.
-
-中文问答【test数字】模型，试下面这些，注意，必须是【test数字】模型：
-+gen \\n活动出席发言稿：\\n大家好，
-+gen \\n怎样创立一家快速盈利的AI公司：\\n1.
-+gen \\nimport torch
-+qq 请以《我的驴》为题写一篇作文
-+qq 请以《企鹅》为题写一首诗歌
-+qq 请设定一个奇幻世界，告诉我详细的世界设定。
-'''
+init_prompt = init_prompt.strip().split('\n')
+for c in range(len(init_prompt)):
+    init_prompt[c] = init_prompt[c].strip().strip('\u3000').strip('\r')
+init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 # Load Model
 
-print(f'Loading model - {MODEL_NAME}')
+print(f'Loading model - {args.MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
@@ -376,10 +329,63 @@ def on_message(message):
         # reply_msg(send_msg)
         save_all_stat(srv, 'chat', out)
 
+########################################################################################################
+
+if CHAT_LANG == 'English':
+    HELP_MSG = '''Commands:
+say something --> chat with bot. use \\n for new line.
++ --> alternate chat reply
++reset --> reset chat
+
++gen YOUR PROMPT --> free generation with any prompt. use \\n for new line.
++qa YOUR QUESTION --> free generation - ask any question (just ask the question). use \\n for new line.
++++ --> continue last free generation (only for +gen / +qa)
+++ --> retry last free generation (only for +gen / +qa)
+
+Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B for best results.
+This is not instruct-tuned for conversation yet, so don't expect good quality. Better use +gen for free generation.
+
+Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
+'''
+elif CHAT_LANG == 'Chinese':        
+    HELP_MSG = f'''指令:
+直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
++ --> 让机器人换个回答
++reset --> 重置对话
+
++gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
++qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
++qq 某某问题 --> 问独立的问题（忽略上下文），且敞开想象力，用\\n代表换行
++++ --> 继续 +gen / +qa / +qq 的回答
+++ --> 换个 +gen / +qa / +qq 的回答
+
+作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
+如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
+现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
+目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
+注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
+
+请先试下列咒语，理解咒语的写法。咒语至关重要。
+
+中文网文【testNovel】模型，试下面这些，注意，必须是【testNovel】模型：
++gen 这是一颗
++gen 以下是不朽的科幻史诗长篇巨著，描写细腻，刻画了数百位个性鲜明的英雄和宏大的星际文明战争。\\n第一章
++gen 这是一个修真世界，详细世界设定如下：\\n1.
+
+中文问答【test数字】模型，试下面这些，注意，必须是【test数字】模型：
++gen \\n活动出席发言稿：\\n大家好，
++gen \\n怎样创立一家快速盈利的AI公司：\\n1.
++gen \\nimport torch
++qq 请以《我的驴》为题写一篇作文
++qq 请以《企鹅》为题写一首诗歌
++qq 请设定一个奇幻世界，告诉我详细的世界设定。
+'''
 print(HELP_MSG)
 print(f'{CHAT_LANG} - {args.MODEL_NAME} - {args.strategy}')
 
 print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
+
+########################################################################################################
 
 while True:
     msg = prompt(f'{user}{interface} ')
