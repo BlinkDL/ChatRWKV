@@ -8,6 +8,15 @@ import torch
 from torch.nn import functional as F
 from tokenizers import Tokenizer
 
+class PIPELINE_ARGS():
+    def __init__(self, temperature=1.0, top_p=1.0, alpha_frequency=0, alpha_presence=0, token_ban=[], token_stop=[]):
+        self.temperature = temperature
+        self.top_p = top_p
+        self.alpha_frequency = alpha_frequency # Frequency Penalty (as in GPT-3)
+        self.alpha_presence = alpha_presence # Presence Penalty (as in GPT-3)
+        self.token_ban = token_ban # ban the generation of some tokens
+        self.token_stop = token_stop # stop generation whenever you see any token here
+
 class PIPELINE():
     def __init__(self, model, WORD_NAME):
         self.model = model
@@ -53,14 +62,35 @@ class PIPELINE():
             out = torch.multinomial(probs, num_samples=1)[0]
             return int(out)
     
-    def generate(self, prompt, max_new_tokens, state=None):
-        out = ''
+    def generate(self, ctx, token_count=100, args=PIPELINE_ARGS(), callback=None, state=None):
         all_tokens = []
-        for i in range(max_new_tokens):
-            out, state = self.model.forward(self.encode(prompt) if i == 0 else [token], state)
-            token = self.sample_logits(out, temperature=1.0, top_p=0.8)
+        out_last = 0
+        out_str = ''
+        occurrence = {}
+        for i in range(token_count):
+
+            # forward & adjust prob.
+            out, state = self.model.forward(self.encode(ctx) if i == 0 else [token], state)
+            for n in args.token_ban:
+                out[n] = -float('inf')
+            for n in occurrence:
+                out[n] -= (args.alpha_presence + occurrence[n] * args.alpha_frequency)
+            
+            # sampler
+            token = self.sample_logits(out, temperature=args.temperature, top_p=args.top_p)
+            if token in args.token_stop:
+                break
             all_tokens += [token]
-            tmp = self.decode(all_tokens)
-            if '\ufffd' not in tmp: # is it a valid utf-8 string?
-                out = tmp
-        return out
+            if token not in occurrence:
+                occurrence[token] = 1
+            else:
+                occurrence[token] += 1
+            
+            # output
+            tmp = self.decode(all_tokens[out_last:])
+            if '\ufffd' not in tmp: # is valid utf-8 string?
+                if callback:
+                    callback(tmp)
+                out_str += tmp
+                out_last = i + 1
+        return out_str

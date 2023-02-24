@@ -4,7 +4,7 @@
 
 print('\nChatRWKV v2 (!!! WIP, might be buggy !!!) https://github.com/BlinkDL/ChatRWKV\n')
 
-import os, time, torch
+import os, time, types, torch
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
 
@@ -18,7 +18,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 os.environ["RWKV_JIT_ON"] = '1'
 
 from rwkv.model import RWKV
-from rwkv.utils import PIPELINE
+from rwkv.utils import PIPELINE, PIPELINE_ARGS
 
 ########################################################################################################
 #
@@ -62,17 +62,23 @@ print(out.detach().cpu().numpy())                   # same result as above
 
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
-prompt = "This is the best"
-print(prompt, end='')
+ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
+print(ctx, end='')
+
+def my_print(s):
+    print(s, end='', flush=True)
+
+args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
+                     alpha_frequency = 0.25, # Frequency Penalty (as in GPT-3)
+                     alpha_presence = 0.25, # Presence Penalty (as in GPT-3)
+                     token_ban = [0], # ban the generation of some tokens
+                     token_stop = []) # stop generation whenever you see any token here
 
 ########################################################################################################
-#
-# 1. It's slow (not optimized yet) when your prompt is long. Better keep it as short as possible (for now).
-# 2. Reuse the state (use deepcopy to clone it) when you are running the same prompt multiple times. 
+# 1. It's slow (not optimized yet) when your ctx is long. Better keep ctx as short as possible (for now).
+# 2. Reuse the state (use deepcopy to clone it) when you are running the same ctx multiple times. 
 # 3. Use ctx4096 models if you need long ctx.
-# 
-completion = pipeline.generate(prompt, max_new_tokens=20)
+pipeline.generate(ctx, token_count=512, args=args, callback=my_print)
 
-print(completion)
-
+print('\n')
 # input('done. press Ctrl+C to exit')
