@@ -63,11 +63,7 @@ os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchma
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
-QA_PROMPT = False # True: Q & A prompt // False: User & Bot prompt
-# 中文问答设置QA_PROMPT=True（只能问答，问答效果更好，但不能闲聊） 中文聊天设置QA_PROMPT=False（可以闲聊，但需要大模型才适合闲聊）
-
 # Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
-
 if CHAT_LANG == 'English':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221115-8047'
@@ -82,75 +78,36 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-441-ctx2048-20230217'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-711-ctx2048-20230216'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-671-ctx2048-20230216'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-837'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-1003'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/3-run1z/rwkv-711'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-2094'
 
-args.ctx_len = 1024
+PROMPT_FILE = f'prompt/default/{CHAT_LANG}-2.py' # -1.py for [User & Bot] (Q&A) prompt, -2.py for [Bob & Alice] (chat) prompt
 
+args.ctx_len = 1024
 CHAT_LEN_SHORT = 40
 CHAT_LEN_LONG = 150
 FREE_GEN_LEN = 200
 
 GEN_TEMP = 1.0
 GEN_TOP_P = 0.85
-
 AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
 
-print(f'\n{CHAT_LANG} - {args.strategy} - QA_PROMPT {QA_PROMPT}')
+print(f'\n{CHAT_LANG} - {args.strategy} - {PROMPT_FILE}')
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
 
 MODEL_NAME = args.MODEL_NAME
+with open(PROMPT_FILE, 'rb') as file:
+    exec(compile(file.read(), PROMPT_FILE, 'exec'))
+    init_prompt = init_prompt.strip().split('\n')
+    for c in range(len(init_prompt)):
+        init_prompt[c] = init_prompt[c].strip().strip('\u3000').strip('\r')
+    init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 if CHAT_LANG == 'English':
-    interface = ":"
-
-    if QA_PROMPT:
-        user = "User"
-        bot = "Bot" # Or: 'The following is a verbose and detailed Q & A conversation of factual information.'
-        init_prompt = f'''
-The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.
-
-{user}{interface} french revolution what year
-
-{bot}{interface} The French Revolution started in 1789, and lasted 10 years until 1799.
-
-{user}{interface} 3+5=?
-
-{bot}{interface} The answer is 8.
-
-{user}{interface} guess i marry who ?
-
-{bot}{interface} Only if you tell me more about yourself - what are your interests?
-
-{user}{interface} solve for a: 9-a=2
-
-{bot}{interface} The answer is a = 7, because 9 - 7 = 2.
-
-{user}{interface} wat is lhc
-
-{bot}{interface} LHC is a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-
-'''        
-    else:
-        user = "Bob"
-        bot = "Alice"
-        init_prompt = f'''
-The following is a verbose detailed conversation between {user} and a young girl {bot}. {bot} is intelligent, friendly and cute. {bot} is unlikely to disagree with {user}.
-
-{user}{interface} Hello {bot}, how are you doing?
-
-{bot}{interface} Hi {user}! Thanks, I'm fine. What about you?
-
-{user}{interface} I am very good! It's nice to see you. Would you mind me chatting with you for a while?
-
-{bot}{interface} Not at all! I'm listening.
-
-'''
-
     HELP_MSG = '''Commands:
 say something --> chat with bot. use \\n for new line.
 + --> alternate chat reply
@@ -166,34 +123,8 @@ This is not instruct-tuned for conversation yet, so don't expect good quality. B
 
 Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
 '''
-elif CHAT_LANG == 'Chinese':
-    interface = ":"
-    if QA_PROMPT:
-        user = "Q"
-        bot = "A"
-        init_prompt = f'''
-Expert Questions & Helpful Answers
-
-Ask Research Experts
-
-'''
-    else:
-        user = "User"
-        bot = "Bot"
-        init_prompt = f'''
-The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.
-
-{user}{interface} wat is lhc
-
-{bot}{interface} LHC is a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-
-{user}{interface} 企鹅会飞吗
-
-{bot}{interface} 企鹅是不会飞的。它们的翅膀主要用于游泳和平衡，而不是飞行。
-
-'''
+elif CHAT_LANG == 'Chinese':        
     HELP_MSG = f'''指令:
-
 直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
 + --> 让机器人换个回答
 +reset --> 重置对话
@@ -205,9 +136,7 @@ The following is a verbose and detailed conversation between an AI assistant cal
 ++ --> 换个 +gen / +qa / +qq 的回答
 
 作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
-
 如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
-
 现在可以输入内容和机器人聊天（注意它不大懂中文，它更懂英文）。请经常使用 +reset 重置机器人记忆。
 目前没有“重复惩罚”，所以机器人有时会重复，此时必须使用 + 换成正常回答，以免污染电脑记忆。
 注意：和上下文无关的独立问题，必须用 +qa 或 +qq 问，以免污染电脑记忆。
