@@ -75,69 +75,83 @@ class RWKV(MyModule):
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 args.n_layer = max(args.n_layer, layer_id+1)
 
-            # Compute strategy
-            s = [x.strip().split(' ') for x in strategy.split('->')]
-            plan = [0] * len(s)
-            stream_i = -1
-            stream_count = 0
-            to_allocate = args.n_layer + 1
+            # Compute strategy. E.g `cuda fp16 *0+ -> cpu fp32 *1` (+ mean streamming)
+            # Split a strategy to multiple configurations
+            configs = [x.strip().split(' ') for x in strategy.split('->')]
+            plan = [0] * len(configs) # plan[i] is the number of layers of configs[i]
+            stream_i = -1 # which config using streaming?
+            stream_count = 0 # number of layers need to be streamed
+            to_allocate = args.n_layer + 1 # total layers need to be allocated
             allocated = 0
             free_slots = 0
-            for i in range(len(s)):
-                if s[i][1] == 'fp32':
-                    s[i][1] = torch.float
-                elif s[i][1] == 'fp16':
-                    s[i][1] = torch.float16
-                elif s[i][1] == 'bf16':
-                    s[i][1] = torch.bfloat16
-                if len(s[i]) > 2:
-                    ss = s[i][2]
-                    assert ss.startswith('*')
-                    if ss.endswith('+'):
-                        plan[i] = int(ss[1:-1])
+            # Each config has 3 parts: device dtype and ss (specific strategy for this config)
+            dtype = 1; ss_idx = 2
+            for i, cfg in enumerate(configs):
+                if   cfg[dtype] == 'fp32': cfg[dtype] = torch.float
+                elif cfg[dtype] == 'fp16': cfg[dtype] = torch.float16
+                elif cfg[dtype] == 'bf16': cfg[dtype] = torch.bfloat16
+
+                if len(cfg) > 2:
+                    ss = cfg[ss_idx] # *number+
+                    assert ss.startswith('*') # ss always start with '*'
+                    if ss.endswith('+'): # streaming
+                        plan[i] = int(ss[1:-1]) # number of layers to be stored in this config
                         stream_i = i
                     else:
                         plan[i] = int(ss[1:])
-                    allocated += plan[i]
-                    if allocated >= to_allocate:
+
+                    allocated += plan[i] # increase number of layers being allocated
+                    if allocated >= to_allocate: # adjust if needed
                         plan[i] += to_allocate - allocated
-                        break
-                else:
+                        break # stop, since no more data need to load
+                else: # no specific strategy => let computer do it for you
                     free_slots += 1
-            if stream_i < 0:
+
+            if stream_i < 0: # not streaming
                 if free_slots > 0 and to_allocate > allocated:
-                    for i in range(len(s)):
-                        if plan[i] == 0:
+                    for i in range(len(configs)):
+                        if plan[i] == 0: # need computer do calculation
                             plan[i] = (to_allocate - allocated) // free_slots
                             allocated += plan[i]
                             free_slots -= 1
+                if to_allocate > allocated: # add remain layers to the last config
+                    plan[len(configs)-1] += to_allocate - allocated
+
+            else: # streaming, for now only one config is streamming supported
                 if to_allocate > allocated:
-                    plan[len(s)-1] += to_allocate - allocated
-            else:
-                if to_allocate > allocated:
-                    stream_count = to_allocate - allocated
-                    plan[stream_i] += stream_count
+                    stream_count = to_allocate - allocated # remaining layers not assign to any config ...
+                    plan[stream_i] += stream_count # ... will be added to this config
+
             print(f'Strategy: (total {args.n_layer}+1={args.n_layer+1} layers)')
-            for i in range(len(s)):
-                ss = s[i]
+            for i, cfg in enumerate(configs):
+                device, dtype = cfg[0], cfg[1]
                 if i != stream_i:
-                    print(f'* {ss[0]} {ss[1]}, store {plan[i]} layers')
+                    print(f'* {device} {dtype}, store {plan[i]} layers')
                 else:
-                    print(f'* {ss[0]} {ss[1]}, store {plan[i]-stream_count} layers, stream {stream_count} layers')
-                plan[i] += (0 if i == 0 else plan[i-1])
+                    print(f'* {device} {dtype}, store {plan[i]-stream_count} layers, stream {stream_count} layers')
+                # accumulate the number of layers to be allocated
+                # (to determine which config will be used to create weight loading strategy for each layer)
+                prev_plan = ( 0 if i == 0 else plan[i-1] )
+                plan[i] += prev_plan
+
+            # Create weight loading strategy for each layer
             self.strategy = [None] * (args.n_layer + 1)
-            strategy = self.strategy
+            s = self.strategy
             for n in range(args.n_layer + 1):
-                for i in range(len(s)):
-                    if n < plan[i]:
-                        strategy[n] = types.SimpleNamespace()
-                        strategy[n].device = s[i][0]
-                        strategy[n].dtype = s[i][1]
-                        strategy[n].stream = False
-                        if i == stream_i and n - (0 if i == 0 else plan[i-1]) >= (plan[i] - stream_count):
-                            strategy[n].stream = True
-                        break
-                print(f"{n}-{strategy[n].device}-{str(strategy[n].dtype).replace('torch.','')}{'-stream' if strategy[n].stream else ''}",end=' ')
+                for i, cfg in enumerate(configs):
+                    if n < plan[i]: # layer n belong to configs[i]
+                        s[n] = types.SimpleNamespace()
+                        s[n].device = cfg[0]
+                        s[n].dtype = cfg[1]
+                        s[n].stream = False
+                        if i == stream_i:
+                            prev_plan = ( 0 if i == 0 else plan[i-1] )
+                            allocated_layers = plan[i] - stream_count
+                            # if n - prev_plan >= allocated_layers: # Bug: try 'cpu fp32 *3 -> cuda fp16 *6+'
+                            if n >= allocated_layers:
+                                s[n].stream = True
+                        break # done for this layer
+                print(f"{n}-{s[n].device}-{str(s[n].dtype).replace('torch.','')}{'-stream' if s[n].stream else ''}",end=' ')
             print()
 
             # Load weights
@@ -147,7 +161,7 @@ class RWKV(MyModule):
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
                     layer_id = args.n_layer
-                dd = strategy[layer_id]
+                dd = s[layer_id]
                 DEVICE = dd.device
                 DTYPE = dd.dtype
                 
