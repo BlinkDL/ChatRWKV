@@ -26,11 +26,13 @@ Demo: https://huggingface.co/spaces/yahma/rwkv-14b
 
 Cool Community RWKV Projects:
 
-https://pypi.org/project/rwkvstic/ Easy pip package (with 8bit & offload for low VRAM GPUs)
+https://pypi.org/project/rwkvstic/ pip package (with 8bit & offload for low VRAM GPUs)
 
 https://github.com/gururise/rwkv_gradio RWKV Gradio
 
 https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
+
+https://github.com/cryscan/eloise RWKV QQ bot
 
 ![RWKV-eval](RWKV-eval.png)
 
