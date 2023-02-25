@@ -76,6 +76,7 @@ Other examples:
 ![ChatRWKV](misc/sample-5.png)
 ![ChatRWKV](misc/sample-6.png)
 ![ChatRWKV](misc/sample-7.png)
+![ChatRWKV](ChatRWKV.png)
 
 ## 中文模型
 
@@ -111,8 +112,6 @@ QQ群 553456870（加入时请简单自我介绍）。有研发能力的朋友�
 +qa 猫会编程吗？
 +qa 知乎大V有哪些特点？
 ```
-
-![ChatRWKV](ChatRWKV.png)
 
 ## Star History
 
