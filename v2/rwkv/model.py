@@ -9,16 +9,36 @@ torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 
-MyModule = torch.nn.Module
-def __nop(ob):
-    return ob
-MyFunction = __nop
-try:
-    if int(os.environ["RWKV_JIT_ON"]) > 0:
-        MyModule = torch.jit.ScriptModule
-        MyFunction = torch.jit.script_method
-except:
-    pass
+if os.environ.get('RWKV_JIT_ON') == '1':
+    MyModule = torch.jit.ScriptModule
+    MyFunction = torch.jit.script_method
+else:
+    os.environ["RWKV_JIT_ON"] = '0'
+    MyModule = torch.nn.Module
+    def __nop(ob):
+        return ob
+    MyFunction = __nop
+
+if os.environ.get('RWKV_CUDA_ON') == '1':
+    from torch.utils.cpp_extension import load
+    wkv_cuda = load(name=f"wkv_x", sources=["rwkv/cuda/wkv_op.cpp", "rwkv/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3"])
+
+    class WKV(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, T, C, w, u, k, v, aa, bb, pp):
+            assert 1 * C % min(C, 32) == 0
+            dtype = k.dtype
+            w = w.float().contiguous()
+            u = u.float().contiguous()
+            k = k.float().contiguous()
+            v = v.float().contiguous()
+            y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float)
+            wkv_cuda.forward(1, T, C, w, u, k, v, y, aa, bb, pp)
+            return y.to(dtype=dtype), aa, bb, pp
+    def RUN_CUDA(T, C, w, u, k, v, aa, bb, pp):
+        return WKV.apply(T, C, w, u, k, v, aa, bb, pp)
+else:
+    os.environ["RWKV_CUDA_ON"] = '0'
 
 ########################################################################################################
 
@@ -28,10 +48,10 @@ class RWKV(MyModule):
         self.args = types.SimpleNamespace()
         args = self.args
         args.MODEL_NAME = model
-        
+
         # Rescale for fp16 mode: set x = x/2 every X layer (to avoid overflow)
         self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
-        print(f'RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
+        print(f'RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RWKV_CUDA_ON {os.environ["RWKV_CUDA_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
 
         # We will load model to CPU first
         args.MODEL_NAME = args.MODEL_NAME.strip()
@@ -215,16 +235,15 @@ class RWKV(MyModule):
         p = torch.maximum(pp, ww)
         e1 = torch.exp(pp - p)
         e2 = torch.exp(ww - p)
-        a = e1 * aa + e2 * v
-        b = e1 * bb + e2
-        ww = pp + t_decay
+        wkv = ((e1 * aa + e2 * v) / (e1 * bb + e2)).to(dtype=r.dtype)
+        ww = t_decay + pp
         p = torch.maximum(ww, k)
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
-        wkv = (a / b).to(dtype=r.dtype)
+
         out = (r * wkv) @ ow
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
-    
+
     @MyFunction
     def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
@@ -245,21 +264,37 @@ class RWKV(MyModule):
             p = torch.maximum(pp, ww)
             e1 = torch.exp(pp - p)
             e2 = torch.exp(ww - p)
-            a = e1 * aa + e2 * vv
-            b = e1 * bb + e2
-            ww = pp + t_decay
+            sx[t] = ((e1 * aa + e2 * vv) / (e1 * bb + e2)).to(dtype=r.dtype)
+            ww = t_decay + pp
             p = torch.maximum(ww, kk)
             e1 = torch.exp(ww - p)
             e2 = torch.exp(kk - p)
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-            sx[t] = (a / b).to(dtype=r.dtype)
         out = (r * sx) @ ow
+        return x + out, xx[-1,:], aa, bb, pp
+    
+    @MyFunction
+    def cuda_att_pre(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw):
+        T, C = x.size()
+        xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+        r = torch.sigmoid(rx @ rw)
+        k = kx @ kw
+        v = vx @ vw
+        return xx, r, k, v
+    def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
+        T, C = x.size()
+        xx, r, k, v = self.cuda_att_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
+        y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
+        out = (r * y) @ ow
         return x + out, xx[-1,:], aa, bb, pp
 
     def forward(self, tokens, state):
-
         with torch.no_grad():
             w = self.w
             args = self.args
@@ -277,8 +312,6 @@ class RWKV(MyModule):
                     state[i*5+4] = torch.zeros(args.n_embd, dtype=dtype, requires_grad=False, device=dev)
 
             seq_mode = len(tokens) > 1
-            ATT = self.att_seq if seq_mode else self.att_one
-            FFN = self.ffn_seq if seq_mode else self.ffn_one
 
             x = w['emb.weight'][tokens if seq_mode else tokens[0]]
 
@@ -289,6 +322,15 @@ class RWKV(MyModule):
                 dd = self.strategy[i]
                 dev = dd.device
                 dtype = dd.dtype
+                if seq_mode:
+                    if 'cuda' in str(dev) and os.environ["RWKV_CUDA_ON"] == '1':
+                        ATT = self.cuda_att_seq
+                    else:
+                        ATT = self.att_seq
+                    FFN = self.ffn_seq
+                else:
+                    ATT = self.att_one
+                    FFN = self.ffn_one
 
                 x = x.to(dtype=dtype, device=dev)
                 if dd.stream:

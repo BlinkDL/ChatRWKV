@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-print('\nChatRWKV v2 (!!! WIP, might be buggy !!!) https://github.com/BlinkDL/ChatRWKV\n')
+print('\nChatRWKV v2 https://github.com/BlinkDL/ChatRWKV\n')
 
 import os, time, types, torch
 import numpy as np
@@ -15,7 +15,8 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 # torch._C._jit_override_can_fuse_on_gpu(True)
 # torch._C._jit_set_texpr_fuser_enabled(False)
 # torch._C._jit_set_nvfuser_enabled(False)
-os.environ["RWKV_JIT_ON"] = '1'
+os.environ['RWKV_JIT_ON'] = '1'
+os.environ["RWKV_CUDA_ON"] = '0' #  '1' : use CUDA kernel for seq mode (much faster)
 
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
@@ -44,6 +45,8 @@ from rwkv.utils import PIPELINE, PIPELINE_ARGS
 # Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
 # 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers on cuda fp16, then [ln_out+head] on cpu fp32
 #
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cpu fp32')
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16 *8 -> cpu fp32')
@@ -75,7 +78,7 @@ args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
                      token_stop = []) # stop generation whenever you see any token here
 
 ########################################################################################################
-# 1. It's slow (not optimized yet) when your ctx is long. Better keep ctx as short as possible (for now).
+# 1. set os.environ["RWKV_CUDA_ON"] = '1' if possible, for faster preprocess of a long ctx.
 # 2. Reuse the state (use deepcopy to clone it) when you are running the same ctx multiple times. 
 # 3. Use ctx4096 models if you need long ctx.
 pipeline.generate(ctx, token_count=512, args=args, callback=my_print)
