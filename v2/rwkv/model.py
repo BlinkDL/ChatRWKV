@@ -84,14 +84,12 @@ class RWKV(MyModule):
             allocated = 0
             free_slots = 0
             for i in range(len(s)):
-                if s[i][1] == 'fp32':
-                    s[i][1] = torch.float
-                elif s[i][1] == 'fp16':
-                    s[i][1] = torch.float16
-                elif s[i][1] == 'bf16':
-                    s[i][1] = torch.bfloat16
-                if len(s[i]) > 2:
-                    ss = s[i][2]
+                si = s[i]
+                if si[1] == 'fp32': si[1] = torch.float
+                elif si[1] == 'fp16': si[1] = torch.float16
+                elif si[1] == 'bf16': si[1] = torch.bfloat16
+                if len(si) > 2:
+                    ss = si[2]
                     assert ss.startswith('*')
                     if ss.endswith('+'):
                         plan[i] = int(ss[1:-1])
@@ -134,7 +132,7 @@ class RWKV(MyModule):
                         strategy[n].device = s[i][0]
                         strategy[n].dtype = s[i][1]
                         strategy[n].stream = False
-                        if i == stream_i and n - (0 if i == 0 else plan[i-1]) >= (plan[i] - stream_count):
+                        if i == stream_i and n >= (plan[i] - stream_count):
                             strategy[n].stream = True
                         break
                 print(f"{n}-{strategy[n].device}-{str(strategy[n].dtype).replace('torch.','')}{'-stream' if strategy[n].stream else ''}",end=' ')
@@ -369,7 +367,7 @@ class RWKV(MyModule):
                         kw=kw, vw=vw, rw=rw)
                     del kw
                     del vw
-                    del rw                        
+                    del rw
                 else:
                     x, state[i*5+4] = FFN(
                         x, sx=state[i*5+4],
