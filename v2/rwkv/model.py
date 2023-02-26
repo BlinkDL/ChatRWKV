@@ -340,15 +340,19 @@ class RWKV(MyModule):
                 # print(">>> DEBUG_INFO next_streaming_layer", next_streaming_layer_idx); assert next_streaming_layer == 0
 
             if next_streaming_layer_idx > -1:
-                i = self.streaming_layers[next_streaming_layer_idx]
-                att = f'blocks.{i}.att.'
-                dd = self.strategy[i]
+                next_i = self.streaming_layers[next_streaming_layer_idx]
+                dd = self.strategy[next_i]
                 dev = dd.device
                 # pre-loading
+                att = f'blocks.{next_i}.att.'
                 preload_att_kw = w[f'{att}key.weight'].to(device=dev, non_blocking=True)
                 preload_att_vw = w[f'{att}value.weight'].to(device=dev, non_blocking=True)
                 preload_att_rw = w[f'{att}receptance.weight'].to(device=dev, non_blocking=True)
                 preload_att_ow = w[f'{att}output.weight'].to(device=dev, non_blocking=True)
+                ffn = f'blocks.{next_i}.ffn.'
+                preload_ffn_kw = w[f'{ffn}key.weight'].to(device=dev, non_blocking=True)
+                preload_ffn_vw = w[f'{ffn}value.weight'].to(device=dev, non_blocking=True)
+                preload_ffn_rw = w[f'{ffn}receptance.weight'].to(device=dev, non_blocking=True)
 
             for i in range(args.n_layer):
                 bbb = f'blocks.{i}.'
@@ -369,18 +373,30 @@ class RWKV(MyModule):
 
                 x = x.to(dtype=dtype, device=dev)
                 if dd.stream:
+                    # preload next layer weights if needed
                     if self.preload_next_streaming_layer:
-                        next_kw = next_kw = next_vw = next_rw = next_ow = None
+                        next_i = self.streaming_layers[next_streaming_layer_idx]
+                        # print(">>> DEBUG_INFO", i, next_i)
+                        assert i == next_i
+                        next_att_kw = next_att_vw = next_att_rw = next_att_ow = None
+                        next_ffn_kw = next_ffn_vw = next_ffn_rw = None
                         if next_streaming_layer_idx < len(self.streaming_layers) - 1:
                             next_streaming_layer_idx += 1
                             next_i = self.streaming_layers[next_streaming_layer_idx]
-                            if next_i >= self.args.n_layer - 1: break # no more layer to pre-load
                             # print(">>> DEBUG_INFO", next_i, self.strategy[next_i])
-                            next_att = f'blocks.{next_i}.att.'
-                            next_kw = w[f'{next_att}key.weight'].to(device=dev, non_blocking=True)
-                            next_vw = w[f'{next_att}value.weight'].to(device=dev, non_blocking=True)
-                            next_rw = w[f'{next_att}receptance.weight'].to(device=dev, non_blocking=True)
-                            next_ow = w[f'{next_att}output.weight'].to(device=dev, non_blocking=True)
+                            if next_i < self.args.n_layer:
+                                next_att = f'blocks.{next_i}.att.'
+                                next_att_kw = w[f'{next_att}key.weight'].to(device=dev, non_blocking=True)
+                                next_att_vw = w[f'{next_att}value.weight'].to(device=dev, non_blocking=True)
+                                next_att_rw = w[f'{next_att}receptance.weight'].to(device=dev, non_blocking=True)
+                                next_att_ow = w[f'{next_att}output.weight'].to(device=dev, non_blocking=True)
+                                next_ffn = f'blocks.{next_i}.ffn.'
+                                next_ffn_kw = w[f'{next_ffn}key.weight'].to(device=dev, non_blocking=True)
+                                next_ffn_vw = w[f'{next_ffn}value.weight'].to(device=dev, non_blocking=True)
+                                next_ffn_rw = w[f'{next_ffn}receptance.weight'].to(device=dev, non_blocking=True)
+
+                    # apply att
+                    if self.preload_next_streaming_layer:
                         kw = preload_att_kw
                         vw = preload_att_vw
                         rw = preload_att_rw
@@ -403,12 +419,37 @@ class RWKV(MyModule):
                     del rw
                     del ow
 
+                    # apply ffn
                     if self.preload_next_streaming_layer:
-                        preload_att_kw = next_kw
-                        preload_att_ow = next_ow
-                        preload_att_rw = next_rw
-                        preload_att_vw = next_vw
-                else:
+                        kw = preload_ffn_kw
+                        vw = preload_ffn_vw
+                        rw = preload_ffn_rw
+                    else:
+                        kw = w[f'{ffn}key.weight'].to(device=dev, non_blocking=True)
+                        vw = w[f'{ffn}value.weight'].to(device=dev, non_blocking=True)
+                        rw = w[f'{ffn}receptance.weight'].to(device=dev, non_blocking=True)
+
+                    x, state[i*5+4] = FFN(
+                        x, sx=state[i*5+4],
+                        ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
+                        k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
+                        kw=kw, vw=vw, rw=rw)
+
+                    del kw
+                    del vw
+                    del rw
+
+                    # Leave this to the end
+                    if self.preload_next_streaming_layer:
+                        preload_att_kw = next_att_kw
+                        preload_att_ow = next_att_ow
+                        preload_att_rw = next_att_rw
+                        preload_att_vw = next_att_vw
+                        preload_ffn_rw = next_ffn_rw
+                        preload_ffn_vw = next_ffn_vw
+                        preload_ffn_kw = next_ffn_kw
+
+                else: # non-streaming mode
                     x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
                         x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
                         ln_w=w[f'{bbb}ln1.weight'], ln_b=w[f'{bbb}ln1.bias'],
@@ -419,19 +460,6 @@ class RWKV(MyModule):
                         rw=w[f'{att}receptance.weight'],
                         ow=w[f'{att}output.weight'])
 
-                if dd.stream:
-                    kw = w[f'{ffn}key.weight'].to(device=dev, non_blocking=True)
-                    vw = w[f'{ffn}value.weight'].to(device=dev, non_blocking=True)
-                    rw = w[f'{ffn}receptance.weight'].to(device=dev, non_blocking=True)
-                    x, state[i*5+4] = FFN(
-                        x, sx=state[i*5+4],
-                        ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
-                        k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
-                        kw=kw, vw=vw, rw=rw)
-                    del kw
-                    del vw
-                    del rw                        
-                else:
                     x, state[i*5+4] = FFN(
                         x, sx=state[i*5+4],
                         ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
