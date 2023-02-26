@@ -24,8 +24,8 @@ os.environ["RWKV_CUDA_ON"] = '1'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023'
 
 os.environ["RWKV_PRELOADING"] = '0'
-MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-1B5-20220929-ctx4096.pth'; MAX_xcnt = 200
-# MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-3B-20221110-ctx4096.pth'; MAX_xcnt = 200
+# MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-1B5-20220929-ctx4096.pth'; MAX_xcnt = 200
+MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-3B-20221110-ctx4096.pth'; MAX_xcnt = 500
 # MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-7B-20230109-ctx4096.pth'; MAX_xcnt = 100
 load_strategy = 'cuda fp16 *6+ -> cpu fp32 *0' # 'cuda fp16'
 PAD_SEQ = [187]
@@ -94,7 +94,7 @@ for d in todo:
     xacc += 1 if correct else 0
     if xcnt % 100 == 0 or xcnt == len(todo):
         print(xcnt, 'ppl', round(math.exp(-xsum / xcnt), 2), 'acc', round(xacc/xcnt*100, 2))#, 'pred', pred, 'dst', dst)
-        if xcnt == MAX_xcnt:
+        if xcnt >= MAX_xcnt:
             print(">>> Timespent:", time.perf_counter() - saved_time)
             break
 
@@ -102,7 +102,7 @@ for d in todo:
 ## Preloading on
 os.environ["RWKV_PRELOADING"] = '1'
 
-print('Check LAMBADA...', 'RWKV_PRELOADING', os.environ["RWKV_PRELOADING"])
+print('\nCheck LAMBADA...', 'RWKV_PRELOADING', os.environ["RWKV_PRELOADING"])
 xsum = 0
 xcnt = 0
 xacc = 0
@@ -130,6 +130,6 @@ for d in todo:
     xacc += 1 if correct else 0
     if xcnt % 100 == 0 or xcnt == len(todo):
         print(xcnt, 'ppl', round(math.exp(-xsum / xcnt), 2), 'acc', round(xacc/xcnt*100, 2))#, 'pred', pred, 'dst', dst)
-        if xcnt == MAX_xcnt:
+        if xcnt >= MAX_xcnt:
             print(">>> Timespent:", time.perf_counter() - saved_time)
             break
