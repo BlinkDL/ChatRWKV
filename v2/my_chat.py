@@ -56,10 +56,9 @@ args.strategy = 'cuda fp16'
 # args.strategy = 'cuda fp16 *8 -> cpu fp32'
 # args.strategy = 'cuda fp16 *6+'
 # args.strategy = 'cuda fp16 *0+ -> cpu fp32 *1'
-args.strategy = 'cpu fp32 *3 -> cuda fp16 *6+'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
-os.environ["RWKV_CUDA_ON"] = '0' #  '1' : use CUDA kernel for seq mode (much faster)
+os.environ["RWKV_CUDA_ON"] = '1' #  '1' : use CUDA kernel for seq mode (much faster)
 os.environ["RWKV_PRELOADING"] = '1' # '1' or '0', pre-loading next streaming layer
 
 CHAT_LANG = 'English' # English // Chinese // more to come
@@ -67,8 +66,11 @@ CHAT_LANG = 'English' # English // Chinese // more to come
 # Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
 # Use '/' in model path, instead of '\'
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019'
-    args.MODEL_NAME = '/home/t/repos/data/RWKV-4-Pile-1B5-20220929-ctx4096.pth'
+    args.MODEL_NAME = 'RWKV-4-Pile-1B5-20220929-ctx4096.pth'; args.strategy = 'cuda fp16'
+    args.MODEL_NAME = 'RWKV-4-Pile-3B-20221110-ctx4096.pth' ; args.strategy = 'cuda fp16 *16+'
+    # args.MODEL_NAME = 'RWKV-4-Pile-7B-20230109-ctx4096.pth'; args.strategy = 'cpu fp32 *3 -> cuda fp16 *3+'
+    args.MODEL_NAME = '/home/t/repos/data/' + args.MODEL_NAME
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221115-8047'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
