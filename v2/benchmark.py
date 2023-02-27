@@ -105,13 +105,11 @@ for d in todo:
     for i in range(len(dst)):
         probs = F.softmax(out[len(src)-1+i,:], dim=-1)
         logits += math.log(probs[dst[i]])
-        _, s_index = torch.sort(probs, descending=True)
-        pred = s_index[0].item()
-        if pred != dst[i]:
+        if torch.argmax(probs).item() != dst[i]:
             correct = False
 
     xcnt += 1
     xsum += logits
     xacc += 1 if correct else 0
     if xcnt % 100 == 0 or xcnt == len(todo):
-        print(xcnt, 'ppl', round(math.exp(-xsum / xcnt), 2), 'acc', round(xacc/xcnt*100, 2))#, 'pred', pred, 'dst', dst)
+        print(xcnt, 'ppl', round(math.exp(-xsum / xcnt), 2), 'acc', round(xacc/xcnt*100, 2))
