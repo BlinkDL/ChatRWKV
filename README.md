@@ -23,6 +23,8 @@ print(out.detach().cpu().numpy())                   # same result as above
 
 **Twitter:** https://twitter.com/BlinkDL_AI
 
+**RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
+
 Demo: https://huggingface.co/spaces/yahma/rwkv-14b
 
 Cool Community RWKV Projects:
