@@ -19,9 +19,9 @@ os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '1'
 
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230204-7324'
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
+# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
-# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023'
 
 PAD_SEQ = [187]
@@ -42,8 +42,8 @@ model = RWKV(model=MODEL_NAME, strategy='cuda fp16')
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
 print('Warmup...')
-out, state = model.forward([187, 510, 1563, 310, 247], None)
-print(out.detach().cpu().numpy())
+out, state = model.forward([187, 510, 1563, 310, 247], None, full_output=True)
+print(out[-1,:].detach().cpu().numpy())
 out, state = model.forward([187], None)
 print(out.detach().cpu().numpy())
 out, state = model.forward([510, 1563], state)
@@ -62,6 +62,35 @@ print(out.detach().cpu().numpy())
 
 ########################################################################################################
 
+# init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price, taxes, insurance, interest, or the annual charge described elsewhere herein, or shall default in the performance of any other obligations set forth in this Contract, the Seller may: at his option: (a) Declare immediately due and payable the entire unpaid balance of purchase price, with accrued interest, taxes, and annual charge, and demand full payment thereof, and enforce conveyance of the land by termination of the contract or according to the terms hereof, in which case the Purchaser shall also be liable to the Seller for reasonable attorney's fees for services rendered by any attorney on behalf of the Seller, or (b) sell said land and premises or any part thereof at public auction, in such manner, at such time and place, upon such terms and conditions, and upon such public notice as the Seller may deem best for the interest of all concerned, consisting of advertisement in a newspaper of general circulation in the county or city in which the security property is located at least once a week for Three (3) successive weeks or for such period as applicable law may require and, in case of default of any purchaser, to re-sell with such postponement of sale or resale and upon such public notice thereof as the Seller may determine, and upon compliance by the Purchaser with the terms of sale, and upon judicial approval as may be required by law, convey said land and premises in fee simple to and at the cost of the Purchaser, who shall not be liable to see to the application of the purchase money; and from the proceeds of the sale: First to pay all proper costs and charges, including but not limited to court costs, advertising expenses, auctioneer's allowance, the expenses, if any required to correct any irregularity in the title, premium for Seller's bond, auditor's fee, attorney's fee, and all other expenses of sale occurred in and about the protection and execution of this contract, and all moneys advanced for taxes, assessments, insurance, and with interest thereon as provided herein, and all taxes due upon said land and premises at time of sale, and to retain as compensation a commission of five percent (5%) on the amount of said sale or sales; SECOND, to pay the whole amount then remaining unpaid of the principal of said contract, and interest thereon to date of payment, whether the same shall be due or not, it being understood and agreed that upon such sale before maturity of the contract the balance thereof shall be immediately due and payable; THIRD, to pay liens of record against the security property according to their priority of lien and to the extent that funds remaining in the hands of the Seller are available; and LAST, to pay the remainder of said proceeds, if any, to the vendor, his heirs, personals representatives, successors or assigns upon the delivery and surrender to the vendee of possession of the land and premises, less costs and excess of obtaining possession.")
+# # init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price")
+
+# print('Benchmark speed...')
+# time_slot = {}
+
+# def record_time(name):
+#     if name not in time_slot:
+#         time_slot[name] = 1e20
+#     tt = (time.time_ns() - time_ref) / 1e9
+#     if tt < time_slot[name]:
+#         time_slot[name] = tt
+
+# for i in range(10):
+#     time_ref = time.time_ns()
+#     out, state = model.forward(init_token, None)
+#     record_time('fast')
+#     print(f"fast {round(time_slot['fast'], 4)}s {out.detach().cpu().numpy()}")
+
+#     time_ref = time.time_ns()
+#     for j in range(len(init_token)):
+#         out, state = model.forward([init_token[j]], None if j == 0 else state)
+#     record_time('slow')
+#     print(f"slow {round(time_slot['slow'], 4)}s {out.detach().cpu().numpy()}")
+
+# exit(0)
+
+########################################################################################################
+
 print('Check LAMBADA...')
 xsum = 0
 xcnt = 0
@@ -72,18 +101,15 @@ for d in todo:
 
     logits = 0
     correct = True
+    out, model_state = model.forward(src+dst, None, full_output=True)
     for i in range(len(dst)):
-        if i == 0:
-            out, model_state = model.forward(src, None)
-        else:
-            out, model_state = model.forward([dst[i-1]], model_state)
-        probs = F.softmax(out.float(), dim=-1)
+        probs = F.softmax(out[len(src)-1+i,:], dim=-1)
         logits += math.log(probs[dst[i]])
         _, s_index = torch.sort(probs, descending=True)
         pred = s_index[0].item()
         if pred != dst[i]:
             correct = False
-    
+
     xcnt += 1
     xsum += logits
     xacc += 1 if correct else 0

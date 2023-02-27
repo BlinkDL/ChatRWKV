@@ -21,7 +21,7 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    wkv_cuda = load(name=f"wkv_x", sources=["rwkv/cuda/wkv_op.cpp", "rwkv/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3"])
+    wkv_cuda = load(name=f"wkv_x", sources=["rwkv/cuda/wkv_op.cpp", "rwkv/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"])
 
     class WKV(torch.autograd.Function):
         @staticmethod
@@ -151,7 +151,7 @@ class RWKV(MyModule):
                 
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
-                if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x:
+                if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                     w[x] = w[x].t()
                 
                 if '.time_decay' in x: # need fp32 for this
@@ -292,7 +292,7 @@ class RWKV(MyModule):
         out = (r * y) @ ow
         return x + out, xx[-1,:], aa, bb, pp
 
-    def forward(self, tokens, state):
+    def forward(self, tokens, state, full_output=False):
         with torch.no_grad():
             w = self.w
             args = self.args
@@ -381,8 +381,9 @@ class RWKV(MyModule):
                     if (i+1) % self.RESCALE_LAYER == 0:
                         x = x / 2
             
+            x = x[-1,:] if (seq_mode and (not full_output)) else x
             x = x.to(dtype=self.strategy[args.n_layer].dtype, device=self.strategy[args.n_layer].device)
-            x = F.layer_norm(x[-1,:] if seq_mode else x, (args.n_embd,), weight=w['ln_out.weight'], bias=w['ln_out.bias'])
-            x = w['head.weight'] @ x
+            x = F.layer_norm(x, (args.n_embd,), weight=w['ln_out.weight'], bias=w['ln_out.bias'])
+            x = x @ w['head.weight']
 
             return x.float(), state
