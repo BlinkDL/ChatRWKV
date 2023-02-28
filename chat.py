@@ -13,6 +13,8 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 args = types.SimpleNamespace()
 
 print('\n\nChatRWKV project: https://github.com/BlinkDL/ChatRWKV')
+for i in range(10):
+    print('NOTE: This code is v1 and only for reference. Use v2 instead.')
 
 import torch
 torch.backends.cudnn.benchmark = True
@@ -56,7 +58,7 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-441-ctx2048-20230217'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-711-ctx2048-20230216'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-671-ctx2048-20230216'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-837'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-973'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/3-run1z/rwkv-711'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-671'
 
