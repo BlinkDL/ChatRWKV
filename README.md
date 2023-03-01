@@ -1,11 +1,13 @@
 # ChatRWKV
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :) **中文使用教程，请往下看，在本页面底部。**
 
+**RWKV pip package**: https://pypi.org/project/rwkv/
+
 ChatRWKV v2: with "stream" and "split" strategies. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 ```
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' # if '1' then use CUDA kernel for seq mode (much faster)
-from rwkv.model import RWKV                         # everything in /v2/rwkv folder
+from rwkv.model import RWKV                         # pip install rwkv
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cuda fp16')
 
 out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
