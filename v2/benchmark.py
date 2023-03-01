@@ -30,7 +30,7 @@ PAD_SEQ = [187]
 
 ########################################################################################################
 
-print(f'\nLoading ChatRWKV')
+print(f'\nLoading ChatRWKV https://github.com/BlinkDL/ChatRWKV')
 import torch
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True

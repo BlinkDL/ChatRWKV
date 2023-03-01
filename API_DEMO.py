@@ -2,13 +2,11 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-print('\nChatRWKV v2 https://github.com/BlinkDL/ChatRWKV\n')
+print('\nChatRWKV https://github.com/BlinkDL/ChatRWKV\n')
 
-import os, sys, time, types, torch
+import os, torch
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
-current_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 
 # Tune these below (test True/False for all of them) to find the fastest setting:
 # torch._C._jit_set_profiling_executor(True)
@@ -20,7 +18,7 @@ sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 
 ########################################################################################################
 #
-# Use '/' in model path, instead of '\'
+# Use '/' in model path, instead of '\'. Use ctx4096 models if you need long ctx.
 #
 # fp16 = good for GPU (!!! DOES NOT support CPU !!!)
 # fp32 = good for CPU
@@ -42,9 +40,12 @@ sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 # Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
 # 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers on cuda fp16, then [ln_out+head] on cpu fp32
 #
-os.environ['RWKV_JIT_ON'] = '1'
-os.environ["RWKV_CUDA_ON"] = '1' #  if '1' then compile CUDA kernel for seq mode (much faster)
-from rwkv.model import RWKV
+
+# set these before import RWKV
+os.environ['RWKV_JIT_ON'] = '1' 
+os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode (much faster)
+
+from rwkv.model import RWKV # pip install rwkv
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32 *3 -> cuda fp16 *6+')
@@ -56,17 +57,8 @@ model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-2022
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019', strategy='cuda fp16 *0+ -> cpu fp32 *1')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096', strategy='cuda:0 fp16 *25 -> cuda:1 fp16')
 
-out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
-print(out.detach().cpu().numpy())                   # get logits
-out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())                   # same result as above
-
-########################################################################################################
-
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
-pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+pipeline = PIPELINE(model, "20B_tokenizer.json")
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(ctx, end='')
@@ -74,17 +66,27 @@ print(ctx, end='')
 def my_print(s):
     print(s, end='', flush=True)
 
+# For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
+# https://platform.openai.com/docs/api-reference/parameter-details
+
 args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
-                     alpha_frequency = 0.25, # Frequency Penalty (as in GPT-3)
-                     alpha_presence = 0.25, # Presence Penalty (as in GPT-3)
+                     alpha_frequency = 0.25,
+                     alpha_presence = 0.25,
                      token_ban = [0], # ban the generation of some tokens
                      token_stop = []) # stop generation whenever you see any token here
 
 ########################################################################################################
 # 1. set os.environ["RWKV_CUDA_ON"] = '1' if possible, for faster preprocess of a long ctx.
 # 2. Reuse the state (use deepcopy to clone it) when you are running the same ctx multiple times. 
-# 3. Use ctx4096 models if you need long ctx.
 pipeline.generate(ctx, token_count=512, args=args, callback=my_print)
 
 print('\n')
-# input('done. press Ctrl+C to exit')
+
+out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
+print(out.detach().cpu().numpy())                   # get logits
+out, state = model.forward([187, 510], None)
+out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
+out, state = model.forward([310, 247], state)
+print(out.detach().cpu().numpy())                   # same result as above
+
+print('\n')
