@@ -4,9 +4,12 @@
 
 print('\nChatRWKV https://github.com/BlinkDL/ChatRWKV\n')
 
-import os, torch
+import os, sys, torch
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
+
+# current_path = os.path.dirname(os.path.abspath(__file__))
+# sys.path.append(f'{current_path}/rwkv_pip_package/src')
 
 # Tune these below (test True/False for all of them) to find the fastest setting:
 # torch._C._jit_set_profiling_executor(True)
@@ -42,7 +45,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 #
 
 # set these before import RWKV
-os.environ['RWKV_JIT_ON'] = '1' 
+os.environ['RWKV_JIT_ON'] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode (much faster)
 
 from rwkv.model import RWKV # pip install rwkv

@@ -11,11 +11,11 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 
-if os.environ.get('RWKV_JIT_ON') == '1':
+if os.environ.get('RWKV_JIT_ON') != '0':
+    os.environ["RWKV_JIT_ON"] = '1'
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
 else:
-    os.environ["RWKV_JIT_ON"] = '0'
     MyModule = torch.nn.Module
     def __nop(ob):
         return ob

@@ -37,7 +37,10 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
-pipeline = PIPELINE(model, "20B_tokenizer.json")
+
+pipeline = PIPELINE(model, "20B_tokenizer.json") # find it in https://github.com/BlinkDL/ChatRWKV
+
+# download models: https://huggingface.co/BlinkDL
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
