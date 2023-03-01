@@ -4,9 +4,11 @@
 
 print('\nChatRWKV v2 https://github.com/BlinkDL/ChatRWKV\n')
 
-import os, time, types, torch
+import os, sys, time, types, torch
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
+current_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 
 # Tune these below (test True/False for all of them) to find the fastest setting:
 # torch._C._jit_set_profiling_executor(True)
@@ -64,7 +66,7 @@ print(out.detach().cpu().numpy())                   # same result as above
 ########################################################################################################
 
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
-pipeline = PIPELINE(model, "20B_tokenizer.json")
+pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(ctx, end='')

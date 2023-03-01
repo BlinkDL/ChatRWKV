@@ -9,6 +9,8 @@ torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 
+current_path = os.path.dirname(os.path.abspath(__file__))
+
 if os.environ.get('RWKV_JIT_ON') == '1':
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
@@ -21,7 +23,7 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    wkv_cuda = load(name=f"wkv_x", sources=["rwkv/cuda/wkv_op.cpp", "rwkv/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"])
+    wkv_cuda = load(name=f"wkv_cuda", sources=[f"{current_path}/cuda/wkv_op.cpp", f"{current_path}/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"])
 
     class WKV(torch.autograd.Function):
         @staticmethod

@@ -3,13 +3,15 @@
 ########################################################################################################
 
 import os, sys, types, json, math, time
+current_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 try:
     os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
 except:
     pass
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
-with open(f"../misc/lambada_test.jsonl", "r", encoding="utf-8") as f:
+with open(f"{current_path}/../misc/lambada_test.jsonl", "r", encoding="utf-8") as f:
     todo = [json.loads(line) for line in f]
     todo = [[doc['text'].rsplit(' ', 1)[0], " " + doc['text'].rsplit(' ', 1)[1]] for doc in todo]
 
@@ -63,31 +65,31 @@ print(out.detach().cpu().numpy())
 ########################################################################################################
 
 # init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price, taxes, insurance, interest, or the annual charge described elsewhere herein, or shall default in the performance of any other obligations set forth in this Contract, the Seller may: at his option: (a) Declare immediately due and payable the entire unpaid balance of purchase price, with accrued interest, taxes, and annual charge, and demand full payment thereof, and enforce conveyance of the land by termination of the contract or according to the terms hereof, in which case the Purchaser shall also be liable to the Seller for reasonable attorney's fees for services rendered by any attorney on behalf of the Seller, or (b) sell said land and premises or any part thereof at public auction, in such manner, at such time and place, upon such terms and conditions, and upon such public notice as the Seller may deem best for the interest of all concerned, consisting of advertisement in a newspaper of general circulation in the county or city in which the security property is located at least once a week for Three (3) successive weeks or for such period as applicable law may require and, in case of default of any purchaser, to re-sell with such postponement of sale or resale and upon such public notice thereof as the Seller may determine, and upon compliance by the Purchaser with the terms of sale, and upon judicial approval as may be required by law, convey said land and premises in fee simple to and at the cost of the Purchaser, who shall not be liable to see to the application of the purchase money; and from the proceeds of the sale: First to pay all proper costs and charges, including but not limited to court costs, advertising expenses, auctioneer's allowance, the expenses, if any required to correct any irregularity in the title, premium for Seller's bond, auditor's fee, attorney's fee, and all other expenses of sale occurred in and about the protection and execution of this contract, and all moneys advanced for taxes, assessments, insurance, and with interest thereon as provided herein, and all taxes due upon said land and premises at time of sale, and to retain as compensation a commission of five percent (5%) on the amount of said sale or sales; SECOND, to pay the whole amount then remaining unpaid of the principal of said contract, and interest thereon to date of payment, whether the same shall be due or not, it being understood and agreed that upon such sale before maturity of the contract the balance thereof shall be immediately due and payable; THIRD, to pay liens of record against the security property according to their priority of lien and to the extent that funds remaining in the hands of the Seller are available; and LAST, to pay the remainder of said proceeds, if any, to the vendor, his heirs, personals representatives, successors or assigns upon the delivery and surrender to the vendee of possession of the land and premises, less costs and excess of obtaining possession.")
-# # init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price")
+init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price")
 
-# print('Benchmark speed...')
-# time_slot = {}
+print('Benchmark speed...')
+time_slot = {}
 
-# def record_time(name):
-#     if name not in time_slot:
-#         time_slot[name] = 1e20
-#     tt = (time.time_ns() - time_ref) / 1e9
-#     if tt < time_slot[name]:
-#         time_slot[name] = tt
+def record_time(name):
+    if name not in time_slot:
+        time_slot[name] = 1e20
+    tt = (time.time_ns() - time_ref) / 1e9
+    if tt < time_slot[name]:
+        time_slot[name] = tt
 
-# for i in range(10):
-#     time_ref = time.time_ns()
-#     out, state = model.forward(init_token, None)
-#     record_time('fast')
-#     print(f"fast {round(time_slot['fast'], 4)}s {out.detach().cpu().numpy()}")
+for i in range(10):
+    time_ref = time.time_ns()
+    out, state = model.forward(init_token, None)
+    record_time('fast')
+    print(f"fast {round(time_slot['fast'], 4)}s {out.detach().cpu().numpy()}")
 
-#     time_ref = time.time_ns()
-#     for j in range(len(init_token)):
-#         out, state = model.forward([init_token[j]], None if j == 0 else state)
-#     record_time('slow')
-#     print(f"slow {round(time_slot['slow'], 4)}s {out.detach().cpu().numpy()}")
+    time_ref = time.time_ns()
+    for j in range(len(init_token)):
+        out, state = model.forward([init_token[j]], None if j == 0 else state)
+    record_time('slow')
+    print(f"slow {round(time_slot['slow'], 4)}s {out.detach().cpu().numpy()}")
 
-# exit(0)
+exit(0)
 
 ########################################################################################################
 
