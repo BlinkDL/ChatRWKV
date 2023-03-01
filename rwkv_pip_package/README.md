@@ -58,13 +58,13 @@ args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
                      token_ban = [0], # ban the generation of some tokens
                      token_stop = []) # stop generation whenever you see any token here
 
-pipeline.generate(ctx, token_count=512, args=args, callback=my_print)
+pipeline.generate(ctx, token_count=200, args=args, callback=my_print)
 print('\n')
 
 out, state = model.forward([187, 510, 1563, 310, 247], None)
 print(out.detach().cpu().numpy())                   # get logits
 out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
+out, state = model.forward([1563], state)           # RNN has state (use deepcopy to clone states)
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 print('\n')

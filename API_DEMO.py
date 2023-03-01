@@ -60,6 +60,15 @@ model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-2022
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019', strategy='cuda fp16 *0+ -> cpu fp32 *1')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096', strategy='cuda:0 fp16 *25 -> cuda:1 fp16')
 
+out, state = model.forward([187, 510, 1563, 310, 247], None)
+print(out.detach().cpu().numpy())                   # get logits
+out, state = model.forward([187, 510], None)
+out, state = model.forward([1563], state)           # RNN has state (use deepcopy to clone states)
+out, state = model.forward([310, 247], state)
+print(out.detach().cpu().numpy())                   # same result as above
+
+print('\n')
+
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
@@ -81,15 +90,6 @@ args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
 ########################################################################################################
 # 1. set os.environ["RWKV_CUDA_ON"] = '1' if possible, for faster preprocess of a long ctx.
 # 2. Reuse the state (use deepcopy to clone it) when you are running the same ctx multiple times. 
-pipeline.generate(ctx, token_count=512, args=args, callback=my_print)
-
-print('\n')
-
-out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
-print(out.detach().cpu().numpy())                   # get logits
-out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())                   # same result as above
+pipeline.generate(ctx, token_count=200, args=args, callback=my_print)
 
 print('\n')
