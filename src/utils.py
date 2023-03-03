@@ -48,7 +48,7 @@ class TOKENIZER():
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
             if temperature != 1.0:
-                probs = probs.pow(1.0 / temperature)
+                probs = probs ** (1.0 / temperature)
             probs = probs / np.sum(probs)
             out = np.random.choice(a=len(probs), p=probs)
             return int(out)
@@ -58,6 +58,6 @@ class TOKENIZER():
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
             if temperature != 1.0:
-                probs = probs.pow(1.0 / temperature)
+                probs = probs ** (1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
             return int(out)
