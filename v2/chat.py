@@ -90,8 +90,12 @@ CHAT_LEN_SHORT = 40
 CHAT_LEN_LONG = 150
 FREE_GEN_LEN = 200
 
+# For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
+# Explanation: https://platform.openai.com/docs/api-reference/parameter-details
 GEN_TEMP = 1.0
 GEN_TOP_P = 0.85
+GEN_alpha_presence = 0.1 # Presence Penalty
+GEN_alpha_frequency = 0.1 # Frequency Penalty
 AVOID_REPEAT = '，。：？！'
 
 ########################################################################################################
@@ -250,12 +254,21 @@ def on_message(message):
 
         begin = len(model_tokens)
         out_last = begin
+        occurrence = {}
         for i in range(FREE_GEN_LEN+100):
+            for n in occurrence:
+                out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
             token = pipeline.sample_logits(
                 out,
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            if token not in occurrence:
+                occurrence[token] = 1
+            else:
+                occurrence[token] += 1
+            occurrence[187] = 0
+
             if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
                 out = run_rnn([token], newline_adj=-2)
             else:
@@ -289,6 +302,7 @@ def on_message(message):
         begin = len(model_tokens)
         out_last = begin
         print(f'{bot}{interface}', end='', flush=True)
+        occurrence = {}
         for i in range(999):
             if i <= 0:
                 newline_adj = -999999999
@@ -298,11 +312,20 @@ def on_message(message):
                 newline_adj = 0
             else:
                 newline_adj = (i - CHAT_LEN_LONG) * 0.25 # MUST END THE GENERATION
+
+            for n in occurrence:
+                out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
             token = pipeline.sample_logits(
                 out,
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            if token not in occurrence:
+                occurrence[token] = 1
+            else:
+                occurrence[token] += 1
+            occurrence[187] = 0
+            
             out = run_rnn([token], newline_adj=newline_adj)
 
             xxx = pipeline.decode(model_tokens[out_last:])
