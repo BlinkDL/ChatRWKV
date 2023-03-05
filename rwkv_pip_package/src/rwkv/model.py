@@ -50,6 +50,7 @@ class RWKV(MyModule):
         self.args = types.SimpleNamespace()
         args = self.args
         args.MODEL_NAME = model
+        args.strategy_string = strategy
 
         # Rescale for fp16 mode: set x = x/2 every X layer (to avoid overflow)
         self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
@@ -62,6 +63,7 @@ class RWKV(MyModule):
         print(f'Loading {args.MODEL_NAME} ...')
         with torch.no_grad():
             self.w = torch.load(args.MODEL_NAME, map_location='cpu')
+            gc.collect()
             w = self.w
             args.n_embd = w['emb.weight'].shape[1]
             try: # precompute embedding
@@ -179,6 +181,11 @@ class RWKV(MyModule):
                 elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE)
 
+                if 'ffn.value.weight' in x:
+                    gc.collect()
+                    if 'cuda' in args.strategy_string:
+                        torch.cuda.empty_cache()
+
                 shape = [i for i in w[x].shape if i != 1]
                 if len(shape) > 1:
                     shape = f" {str(shape[0]).rjust(5)} {str(shape[1]).rjust(5)}"
@@ -196,6 +203,8 @@ class RWKV(MyModule):
                     print('.', end = '', flush = True)
             assert len(keys) == 4 + (4+9+5) * args.n_layer, 'Error: not a RWKV-4 model (4a and 4b models are not supported as of now)'
             gc.collect()
+            if 'cuda' in args.strategy_string:
+                torch.cuda.empty_cache()
         
     @MyFunction
     def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw):

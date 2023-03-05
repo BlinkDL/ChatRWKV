@@ -39,6 +39,7 @@ class RWKV_RNN(MyModule):
 
         with torch.no_grad():
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
+            gc.collect()
             args.n_embd = w['emb.weight'].shape[1]
             args.n_layer = 0
             keys = list(w.keys()) # refine weights and send to correct device
@@ -72,6 +73,11 @@ class RWKV_RNN(MyModule):
                 
                 if 'cuda' in args.RUN_DEVICE:
                     w[x] = w[x].to(self.RUN_DEVICE)
+
+                if 'ffn.value.weight' in x:
+                    gc.collect()
+                    if 'cuda' in args.RUN_DEVICE:
+                        torch.cuda.empty_cache()
 
                 shape = w[x].shape
                 shape = [i for i in shape if i != 1]
@@ -119,7 +125,8 @@ class RWKV_RNN(MyModule):
 
         self.eval()
         gc.collect()
-        torch.cuda.empty_cache()
+        if 'cuda' in args.RUN_DEVICE:
+            torch.cuda.empty_cache()
 
     def LN(self, x, w):
         return F.layer_norm(x, (self.args.n_embd,), weight=w.weight, bias=w.bias)
