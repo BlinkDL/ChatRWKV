@@ -26,30 +26,18 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 # fp16 = good for GPU (!!! DOES NOT support CPU !!!)
 # fp32 = good for CPU
 # bf16 = worse accuracy, supports CPU
+# xxxi8 (example: fp16i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
 #
-# Strategy examples: (device = cpu/cuda/cuda:0/cuda:1/...)
-# Here we consider [ln_out+head] to be an extra layer, so L12-D768 model has "13" layers, L24-D2048 model has "25" layers, etc.
+# Read https://pypi.org/project/rwkv/ for Strategy Guide
 #
-# 'cpu fp32' = everything on cpu fp32
-# 'cuda fp16' = everything on cuda fp16
-#
-# 'cuda fp16 *6 -> cpu fp32' = first 6 layers on cuda fp16, then on cpu fp32
-# 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' = first 10 layers on cuda:0 fp16, then 8 layers on cuda:1 fp16, then on cpu fp32
-#
-# Use '+' for STREAM mode (do it on your fastest GPU), requires some VRAM to store streamed layers
-# 'cuda fp16 *6+' = first 6 layers on cuda fp16, then stream the rest on it
-# (for best speed: try *1+ *2+ *3+ ... until you run out of VRAM)
-#
-# Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
-# 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers on cuda fp16, then [ln_out+head] on cpu fp32
-#
-
+########################################################################################################
 # set these before import RWKV
 os.environ['RWKV_JIT_ON'] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode (much faster)
 
 from rwkv.model import RWKV # pip install rwkv
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16i8')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32 *3 -> cuda fp16 *6+')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cpu fp32')

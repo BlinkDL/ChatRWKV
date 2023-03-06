@@ -20,7 +20,7 @@ with open(f"{current_path}/../misc/lambada_test.jsonl", "r", encoding="utf-8") a
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '1'
 
-# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230204-7324'
+# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
 MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
@@ -41,6 +41,16 @@ from rwkv.utils import PIPELINE, PIPELINE_ARGS
 
 print(f'Loading model - {MODEL_NAME}')
 model = RWKV(model=MODEL_NAME, strategy='cuda fp16')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16 *0+')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16 *10+')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *0+')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *10+')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *1 -> cuda fp16')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 -> cpu fp32 *1')
+# model = RWKV(model=MODEL_NAME, strategy='cpu fp32')
+# model = RWKV(model=MODEL_NAME, strategy='cpu fp32i8')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *10 -> cuda fp16 *0+')
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
 print('Warmup...')

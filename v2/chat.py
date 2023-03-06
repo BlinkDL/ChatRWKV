@@ -35,33 +35,21 @@ torch.backends.cuda.matmul.allow_tf32 = True
 # fp16 = good for GPU (!!! DOES NOT support CPU !!!)
 # fp32 = good for CPU
 # bf16 = worse accuracy, supports CPU
+# xxxi8 (example: fp16i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
 #
-# Strategy examples: (device = cpu/cuda/cuda:0/cuda:1/...)
-# Here we consider [ln_out+head] to be an extra layer, so L12-D768 model has "13" layers, L24-D2048 model has "25" layers, etc.
-#
-# 'cpu fp32' = everything on cpu fp32
-# 'cuda fp16' = everything on cuda fp16
-#
-# 'cuda fp16 *6 -> cpu fp32' = first 6 layers on cuda fp16, then on cpu fp32
-# 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' = first 10 layers on cuda:0 fp16, then 8 layers on cuda:1 fp16, then on cpu fp32
-#
-# Use '+' for STREAM mode (do it on your fastest GPU), requires some VRAM to store streamed layers
-# 'cuda fp16 *6+' = first 6 layers on cuda fp16, then stream the rest on it
-# (for best speed: try *1+ *2+ *3+ ... until you run out of VRAM)
-#
-# Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
-# 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers on cuda fp16, then [ln_out+head] on cpu fp32
+# Read https://pypi.org/project/rwkv/ for Strategy Guide
 #
 ########################################################################################################
 
 # args.strategy = 'cpu fp32'
 args.strategy = 'cuda fp16'
-# args.strategy = 'cuda fp16 *8 -> cpu fp32'
-# args.strategy = 'cuda fp16 *6+'
-# args.strategy = 'cuda fp16 *0+ -> cpu fp32 *1'
+# args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
+# args.strategy = 'cuda fp16i8'
+# args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
+# args.strategy = 'cuda fp16i8 *10 -> cuda fp16 *0+'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
-os.environ["RWKV_CUDA_ON"] = '0' #  '1' : use CUDA kernel for seq mode (much faster)
+os.environ["RWKV_CUDA_ON"] = '0' # '1' to use CUDA kernel for seq mode (much faster)
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
@@ -81,7 +69,7 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-441-ctx2048-20230217'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-1400'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-1485'
 
 PROMPT_FILE = f'{current_path}/prompt/default/{CHAT_LANG}-2.py' # -1.py for [User & Bot] (Q&A) prompt, -2.py for [Bob & Alice] (chat) prompt
 
