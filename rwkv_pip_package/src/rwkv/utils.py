@@ -9,9 +9,10 @@ from torch.nn import functional as F
 from tokenizers import Tokenizer
 
 class PIPELINE_ARGS():
-    def __init__(self, temperature=1.0, top_p=1.0, alpha_frequency=0, alpha_presence=0, token_ban=[], token_stop=[]):
+    def __init__(self, temperature=1.0, top_p=1.0, top_k=50, alpha_frequency=0, alpha_presence=0, token_ban=[], token_stop=[]):
         self.temperature = temperature
         self.top_p = top_p
+        self.top_k = top_k
         self.alpha_frequency = alpha_frequency # Frequency Penalty (as in GPT-3)
         self.alpha_presence = alpha_presence # Presence Penalty (as in GPT-3)
         self.token_ban = token_ban # ban the generation of some tokens
@@ -38,25 +39,32 @@ class PIPELINE():
     def decode(self, x):
         return self.tokenizer.decode(x)
 
-    def sample_logits(self, logits, temperature=1.0, top_p=1.0):
+    def sample_logits(self, logits, temperature=1.0, top_p=1.0, top_k=50):
         probs = F.softmax(logits.float(), dim=-1)
 
         if probs.device == torch.device('cpu'):
             probs = probs.numpy()
-            sorted_probs = np.sort(probs)[::-1]
+            sorted_ids = np.argsort(probs)
+            sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
+            if top_k < len(probs):
+                probs[sorted_ids[:-int(top_k)]] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
             probs = probs / np.sum(probs)
             out = np.random.choice(a=len(probs), p=probs)
             return int(out)
         else:
-            sorted_probs = torch.sort(probs, descending=True)[0]
+            sorted_ids = torch.argsort(probs)
+            sorted_probs = probs[sorted_ids]
+            sorted_probs = torch.flip(sorted_probs, dims=(0,))
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             probs[probs < cutoff] = 0
+            if top_k < len(probs):
+                probs[sorted_ids][:-int(top_k)] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
@@ -77,7 +85,7 @@ class PIPELINE():
                 out[n] -= (args.alpha_presence + occurrence[n] * args.alpha_frequency)
             
             # sampler
-            token = self.sample_logits(out, temperature=args.temperature, top_p=args.top_p)
+            token = self.sample_logits(out, temperature=args.temperature, top_p=args.top_p, top_k=args.top_k)
             if token in args.token_stop:
                 break
             all_tokens += [token]
