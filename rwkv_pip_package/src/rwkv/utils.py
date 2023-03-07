@@ -44,11 +44,12 @@ class PIPELINE():
 
         if probs.device == torch.device('cpu'):
             probs = probs.numpy()
-            sorted_probs = np.sort(probs)[::-1]
+            sorted_ids = np.argsort(probs)
+            sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             if top_k < len(probs):
-                probs[np.argsort(probs)[:-int(top_k)]] = 0
+                probs[sorted_ids[:-int(top_k)]] = 0
             probs[probs < cutoff] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
@@ -56,11 +57,13 @@ class PIPELINE():
             out = np.random.choice(a=len(probs), p=probs)
             return int(out)
         else:
-            sorted_probs = torch.sort(probs, descending=True)[0]
+            sorted_ids = torch.argsort(probs)
+            sorted_probs = probs[sorted_ids]
+            sorted_probs = torch.flip(sorted_probs, dims=(0,))
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
             if top_k < len(probs):
-                probs[torch.argsort(probs)[:-int(top_k)]] = 0
+                probs[sorted_ids][:-int(top_k)] = 0
             probs[probs < cutoff] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
