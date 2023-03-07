@@ -21,7 +21,7 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 # We consider [ln_out+head] to be an extra layer, so L12-D768 (169M) has "13" layers, L24-D2048 (1.5B) has "25" layers, etc.
 # Strategy Examples: (device = cpu/cuda/cuda:0/cuda:1/...)
 # 'cpu fp32' = all layers cpu fp32
-# 'cuda fp16' = all layerscuda fp16
+# 'cuda fp16' = all layers cuda fp16
 # 'cuda fp16i8' = all layers cuda fp16 with int8 quantization
 # 'cuda fp16i8 *10 -> cpu fp32' = first 10 layers cuda fp16i8, then cpu fp32 (increase 10 for better speed)
 # 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' = first 10 layers cuda:0 fp16, then 8 layers cuda:1 fp16, then cpu fp32
@@ -65,7 +65,7 @@ def my_print(s):
 # For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
 # https://platform.openai.com/docs/api-reference/parameter-details
 
-args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
+args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100,
                      alpha_frequency = 0.25,
                      alpha_presence = 0.25,
                      token_ban = [0], # ban the generation of some tokens

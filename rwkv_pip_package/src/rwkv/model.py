@@ -8,8 +8,9 @@ from torch.nn import functional as F
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
-
 current_path = os.path.dirname(os.path.abspath(__file__))
+
+########################################################################################################
 
 if os.environ.get('RWKV_JIT_ON') != '0':
     os.environ["RWKV_JIT_ON"] = '1'
@@ -23,20 +24,19 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    wkv_cuda = load(name=f"wkv_cuda", sources=[f"{current_path}/cuda/wkv_op.cpp", f"{current_path}/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"])
-
-    class WKV(torch.autograd.Function):
+    wkv_cuda = load(name=f"wkv_cuda", sources=[f"{current_path}/cuda/wkv_op.cpp", f"{current_path}/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"])
+    class WKV(torch.autograd.Function): # only for fp16
         @staticmethod
         def forward(ctx, T, C, w, u, k, v, aa, bb, pp):
             assert 1 * C % min(C, 32) == 0
-            dtype = k.dtype
-            w = w.float().contiguous()
-            u = u.float().contiguous()
-            k = k.float().contiguous()
-            v = v.float().contiguous()
-            y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float)
+            assert k.dtype == torch.float16
+            w = w.contiguous()
+            u = u.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
+            y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
             wkv_cuda.forward(1, T, C, w, u, k, v, y, aa, bb, pp)
-            return y.to(dtype=dtype), aa, bb, pp
+            return y, aa, bb, pp
     def RUN_CUDA(T, C, w, u, k, v, aa, bb, pp):
         return WKV.apply(T, C, w, u, k, v, aa, bb, pp)
 else:
@@ -247,6 +247,8 @@ class RWKV(MyModule):
     def uint8_to_type(self, x, mx, my, rx, ry):
         return (x * ry + my) * rx / 255.0 + mx
 
+    ########################################################################################################
+
     @MyFunction
     def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
@@ -254,21 +256,23 @@ class RWKV(MyModule):
         rx = xx * r_mix + sx * (1 - r_mix)
 
         r = torch.sigmoid(rx @ rw)
-        k = torch.square(torch.relu(kx @ kw))
-        out = r * (k @ vw)
+        vx = torch.square(torch.relu(kx @ kw))
+        out = r * (vx @ vw)
         return x + out, xx
     
     @MyFunction
     def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
-        xk = xx * k_mix + sx * (1 - k_mix)
-        xr = xx * r_mix + sx * (1 - r_mix)
+        kx = xx * k_mix + sx * (1 - k_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(xr @ rw)
-        k = torch.square(torch.relu(xk @ kw))
-        out = r * (k @ vw)
+        r = torch.sigmoid(rx @ rw)
+        vx = torch.square(torch.relu(kx @ kw))
+        out = r * (vx @ vw)
         return x + out, xx[-1,:]
+
+    ########################################################################################################
 
     @MyFunction
     def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
@@ -336,13 +340,19 @@ class RWKV(MyModule):
         r = torch.sigmoid(rx @ rw)
         k = kx @ kw
         v = vx @ vw
-        return xx, r, k, v
+        return xx[-1,:], r, k, v
+    @MyFunction
+    def cuda_att_seq_post(self, x, r, y, ow):
+        out = (r * y) @ ow
+        return x + out
     def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
         T, C = x.size()
         xx, r, k, v = self.cuda_att_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
         y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
-        out = (r * y) @ ow
-        return x + out, xx[-1,:], aa, bb, pp
+        out = self.cuda_att_seq_post(x, r, y, ow)
+        return out, xx, aa, bb, pp
+
+    ########################################################################################################
 
     def forward(self, tokens, state, full_output=False):
         with torch.no_grad():
@@ -401,10 +411,7 @@ class RWKV(MyModule):
                     t_decay = w[f'{att}time_decay'], t_first = w[f'{att}time_first'],
                     kw=kw, vw=vw, rw=rw, ow=ow)
                 if wtype == torch.uint8 or dd.stream:
-                    del kw
-                    del vw
-                    del rw
-                    del ow
+                    del kw, vw, rw, ow
 
                 kw = self.get_w(f'{ffn}key.weight', atype)
                 vw = self.get_w(f'{ffn}value.weight', atype)
@@ -419,9 +426,7 @@ class RWKV(MyModule):
                     k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
                     kw=kw, vw=vw, rw=rw)
                 if wtype == torch.uint8 or dd.stream:                
-                    del kw
-                    del vw
-                    del rw
+                    del kw, vw, rw
 
                 if self.RESCALE_LAYER > 0:
                     if (i+1) % self.RESCALE_LAYER == 0:
