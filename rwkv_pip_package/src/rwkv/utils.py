@@ -48,9 +48,9 @@ class PIPELINE():
             sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            probs[probs < cutoff] = 0
             if top_k < len(probs):
                 probs[sorted_ids[:-int(top_k)]] = 0
-            probs[probs < cutoff] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
             probs = probs / np.sum(probs)
@@ -62,9 +62,9 @@ class PIPELINE():
             sorted_probs = torch.flip(sorted_probs, dims=(0,))
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
             cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            probs[probs < cutoff] = 0
             if top_k < len(probs):
                 probs[sorted_ids][:-int(top_k)] = 0
-            probs[probs < cutoff] = 0
             if temperature != 1.0:
                 probs = probs ** (1.0 / temperature)
             out = torch.multinomial(probs, num_samples=1)[0]
