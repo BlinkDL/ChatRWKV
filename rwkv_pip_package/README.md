@@ -26,11 +26,11 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 # 'cuda fp16i8 *10 -> cpu fp32' = first 10 layers cuda fp16i8, then cpu fp32 (increase 10 for better speed)
 # 'cuda:0 fp16 *10 -> cuda:1 fp16 *8 -> cpu fp32' = first 10 layers cuda:0 fp16, then 8 layers cuda:1 fp16, then cpu fp32
 #
-# Basic Strategy Guide:
+# Basic Strategy Guide: (fp16i8 works for any GPU)
 # 100% VRAM = 'cuda fp16'                   # all layers cuda fp16
-#  97% VRAM = 'cuda fp16i8 *1 -> cuda fp16' # first 1 layer  cuda fp16i8, then cuda fp16
-#  95% VRAM = 'cuda fp16i8 *2 -> cuda fp16' # first 2 layers cuda fp16i8, then cuda fp16
-#  93% VRAM = 'cuda fp16i8 *3 -> cuda fp16' # first 3 layers cuda fp16i8, then cuda fp16
+#  98% VRAM = 'cuda fp16i8 *1 -> cuda fp16' # first 1 layer  cuda fp16i8, then cuda fp16
+#  96% VRAM = 'cuda fp16i8 *2 -> cuda fp16' # first 2 layers cuda fp16i8, then cuda fp16
+#  94% VRAM = 'cuda fp16i8 *3 -> cuda fp16' # first 3 layers cuda fp16i8, then cuda fp16
 #  ...
 #  50% VRAM = 'cuda fp16i8'                 # all layers cuda fp16i8
 #  48% VRAM = 'cuda fp16i8 -> cpu fp32 *1'  # most layers cuda fp16i8, last 1 layer  cpu fp32
@@ -42,6 +42,7 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 # Use '+' for STREAM mode, which can save VRAM too, and it is sometimes faster
 # 'cuda fp16 *10+' = first 10 layers cuda fp16, then fp16 stream the rest to it (increase 10 for better speed)
 # 'cuda fp16i8 *10 -> cuda fp16 *0+' = first 10 layers cuda fp16i8, then fp16 stream the rest to it
+# (streaming fp16i8 is very slow right now, so please only do fp16 stream like above)
 #
 # Extreme STREAM: 3G VRAM is enough to run RWKV 14B (extremely slow. will be faster in future)
 # 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers cuda fp16, last 1 layer [ln_out+head] cpu fp32
