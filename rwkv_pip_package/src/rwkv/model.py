@@ -179,18 +179,28 @@ class RWKV(MyModule):
                             w[x] = w[x].to(dtype=WTYPE)
                         else:
                             w[x] = w[x].float()
-                            w[x+'_mx'] = torch.amin(w[x], dim=0)
-                            w[x+'_rx'] = torch.amax(w[x], dim=0) - w[x+'_mx']
-                            w[x] = (w[x] - w[x+'_mx']) / w[x+'_rx']
-                            w[x+'_my'] = torch.amin(w[x], dim=1)
-                            w[x+'_ry'] = torch.amax(w[x], dim=1) - w[x+'_my']
-                            w[x+'_my'] = w[x+'_my'].unsqueeze(1)
-                            w[x+'_ry'] = w[x+'_ry'].unsqueeze(1)
-                            w[x] = (w[x] - w[x+'_my']) / w[x+'_ry']
+                            if w[x].shape[0] > w[x].shape[1]:
+                                w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] - w[x+'_my']
+                                w[x+'_mx'] = torch.amin(w[x], dim=0)
+                                w[x] = w[x] - w[x+'_mx']
+                                w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] / w[x+'_ry']
+                                w[x+'_rx'] = torch.amax(w[x], dim=0)
+                                w[x] = w[x] / w[x+'_rx']
+                            else:
+                                w[x+'_mx'] = torch.amin(w[x], dim=0)
+                                w[x] = w[x] - w[x+'_mx']
+                                w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] - w[x+'_my']
+                                w[x+'_rx'] = torch.amax(w[x], dim=0)
+                                w[x] = w[x] / w[x+'_rx']
+                                w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] / w[x+'_ry']
                             w[x] = torch.round(w[x] * 255.0).to(dtype=torch.uint8)
                             w[x+'_mx'] = w[x+'_mx'].to(dtype=ATYPE)
                             w[x+'_rx'] = w[x+'_rx'].to(dtype=ATYPE)
-                            w[x+'_my'] = (w[x+'_my'] * 255.0).to(dtype=ATYPE)
+                            w[x+'_my'] = w[x+'_my'].to(dtype=ATYPE)
                             w[x+'_ry'] = w[x+'_ry'].to(dtype=ATYPE)
                     else:
                         w[x] = w[x].to(dtype=ATYPE)
@@ -245,7 +255,7 @@ class RWKV(MyModule):
 
     @MyFunction
     def uint8_to_type(self, x, mx, my, rx, ry):
-        return (x * ry + my) * rx / 255.0 + mx
+        return (x * rx * ry / 255.0) + mx + my
 
     ########################################################################################################
 
