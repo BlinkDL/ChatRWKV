@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from tokenizers import Tokenizer
 
 class PIPELINE_ARGS():
-    def __init__(self, temperature=1.0, top_p=1.0, top_k=50, alpha_frequency=0, alpha_presence=0, token_ban=[], token_stop=[]):
+    def __init__(self, temperature=1.0, top_p=0.85, top_k=0, alpha_frequency=0.2, alpha_presence=0.2, token_ban=[], token_stop=[]):
         self.temperature = temperature
         self.top_p = top_p
         self.top_k = top_k
@@ -39,7 +39,7 @@ class PIPELINE():
     def decode(self, x):
         return self.tokenizer.decode(x)
 
-    def sample_logits(self, logits, temperature=1.0, top_p=1.0, top_k=0):
+    def sample_logits(self, logits, temperature=1.0, top_p=0.85, top_k=0):
         probs = F.softmax(logits.float(), dim=-1)
         top_k = int(top_k)
         if probs.device == torch.device('cpu'):
