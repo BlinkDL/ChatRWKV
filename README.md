@@ -3,7 +3,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/
 
-ChatRWKV v2: with "stream" and "split" strategies. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
+ChatRWKV v2: with "stream" and "split" strategies, and INT8. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 ```python
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' # if '1' then use CUDA kernel for seq mode (much faster)
@@ -41,9 +41,7 @@ https://github.com/cryscan/eloise RWKV QQ bot
 
 ![RWKV-eval](RWKV-eval.png)
 
-It is not instruct-tuned for conversation yet, so don't directly ask it to do stuffs (unless it's a simple question).
-
-For "Instruct-test1" RWKV-4 models (available in 1B5/3B/7B https://huggingface.co/BlinkDL, check https://huggingface.co/datasets/bigscience/xP3all/viewer/en/train for prompt examples):
+It is not instruct-tuned, so don't directly ask it to do stuffs (unless it's a simple question).
 
 ```+gen \nQ: prompt\n\nA:```
 
