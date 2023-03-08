@@ -57,7 +57,7 @@ For all RWKV-4 models, some great Q&A prompts:
 
 Other examples:
 
-```+gen Here is a short story in which Jeff Bezos, Elon Musk, and Bill Gates fight in a tournament:```
+```+gen Here's a short cyberpunk sci-fi adventure story. The story's main character is an artificial human created by a company called OpenBot.\n\nThe Story:```
 
 ```+gen Here is a Python function that generates string of words that would confuse LLMs:```
 
@@ -73,6 +73,7 @@ Other examples:
 
 ```+gen Here is a shell script which will find all .hpp files in /home/workspace and delete the 3th row string of these files:```
 
+![ChatRWKV](ChatRWKV.png)
 ![ChatRWKV](misc/sample-1.png)
 ![ChatRWKV](misc/sample-2.png)
 ![ChatRWKV](misc/sample-3.png)
@@ -80,7 +81,6 @@ Other examples:
 ![ChatRWKV](misc/sample-5.png)
 ![ChatRWKV](misc/sample-6.png)
 ![ChatRWKV](misc/sample-7.png)
-![ChatRWKV](ChatRWKV.png)
 
 ## 中文模型
 
