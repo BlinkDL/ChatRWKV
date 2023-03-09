@@ -3,6 +3,18 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/
 
+**Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
+
+**RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
+
+## RWKV Discord: https://discord.gg/bDSBUMeFpc (let's build together)
+
+**Twitter:** https://twitter.com/BlinkDL_AI
+
+**RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
+
+**Hugging Face space**: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
+
 ChatRWKV v2: with "stream" and "split" strategies, and INT8. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 ```python
 os.environ["RWKV_JIT_ON"] = '1'
@@ -17,17 +29,8 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 ```
-**Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
-**RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
-
-**RWKV Discord:** https://discord.gg/bDSBUMeFpc (let's build together)
-
-**Twitter:** https://twitter.com/BlinkDL_AI
-
-**RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
-
-**Hugging Face space**: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
+![ChatRWKV](ChatRWKV.png)
 
 Cool Community RWKV Projects:
 
@@ -71,7 +74,6 @@ Other examples:
 
 ```+gen Here is a shell script which will find all .hpp files in /home/workspace and delete the 3th row string of these files:```
 
-![ChatRWKV](ChatRWKV.png)
 ![ChatRWKV](misc/sample-1.png)
 ![ChatRWKV](misc/sample-2.png)
 ![ChatRWKV](misc/sample-3.png)
