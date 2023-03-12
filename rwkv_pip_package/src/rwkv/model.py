@@ -206,6 +206,8 @@ class RWKV(MyModule):
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE)
+                
+                if (dd.stream) or (DEVICE != 'cpu'):
                     try:
                         w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE)
                         w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE)
@@ -239,20 +241,18 @@ class RWKV(MyModule):
             if 'cuda' in args.strategy_string:
                 torch.cuda.empty_cache()
 
-    def get_w(self, x, dtype):
-        w = self.w
-        if w[x].dtype != torch.uint8:
-            return w[x]
-        return self.uint8_to_type(w[x].to(dtype=dtype), w[x+'_mx'], w[x+'_my'], w[x+'_rx'], w[x+'_ry'])
-
     @MyFunction
-    def uint8_to_type(self, x, mx, my, rx, ry):
-        return (x + 0.5) * ry * rx + my + mx
+    def mm8_seq(self, x, w, mx, rx, my, ry):
+        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+    
+    @MyFunction
+    def mm8_one(self, x, w, mx, rx, my, ry):
+        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
 
     ########################################################################################################
 
     @MyFunction
-    def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw):
+    def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
@@ -261,9 +261,22 @@ class RWKV(MyModule):
         vx = torch.square(torch.relu(kx @ kw))
         out = r * (vx @ vw)
         return x + out, xx
-    
+
     @MyFunction
-    def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw):
+    def ffn_one_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        kx = xx * k_mix + sx * (1 - k_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+
+        r = torch.sigmoid(self.mm8_one(rx, rw, rmx, rrx, rmy, rry))
+        vx = torch.square(torch.relu(self.mm8_one(kx, kw, kmx, krx, kmy, kry)))
+        out = r * (self.mm8_one(vx, vw, vmx, vrx, vmy, vry))
+        return x + out, xx
+    
+    ########################################################################################################
+
+    @MyFunction
+    def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
@@ -274,10 +287,22 @@ class RWKV(MyModule):
         out = r * (vx @ vw)
         return x + out, xx[-1,:]
 
+    @MyFunction
+    def ffn_seq_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+
+        r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
+        vx = torch.square(torch.relu(self.mm8_seq(kx, kw, kmx, krx, kmy, kry)))
+        out = r * (self.mm8_seq(vx, vw, vmx, vrx, vmy, vry))
+        return x + out, xx[-1,:]
+
     ########################################################################################################
 
     @MyFunction
-    def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
+    def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kx = xx * k_mix + sx * (1 - k_mix)
         vx = xx * v_mix + sx * (1 - v_mix)
@@ -301,7 +326,33 @@ class RWKV(MyModule):
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
 
     @MyFunction
-    def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
+    def att_one_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+
+        r = torch.sigmoid(self.mm8_one(rx, rw, rmx, rrx, rmy, rry))
+        k = (self.mm8_one(kx, kw, kmx, krx, kmy, kry)).float()
+        v = (self.mm8_one(vx, vw, vmx, vrx, vmy, vry)).float()
+
+        ww = t_first + k
+        p = torch.maximum(pp, ww)
+        e1 = torch.exp(pp - p)
+        e2 = torch.exp(ww - p)
+        wkv = ((e1 * aa + e2 * v) / (e1 * bb + e2)).to(dtype=x.dtype)
+        ww = t_decay + pp
+        p = torch.maximum(ww, k)
+        e1 = torch.exp(ww - p)
+        e2 = torch.exp(k - p)
+
+        out = self.mm8_one(r * wkv, ow, omx, orx, omy, ory)
+        return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
+
+    ########################################################################################################
+
+    @MyFunction
+    def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
@@ -330,9 +381,42 @@ class RWKV(MyModule):
             pp = p
         out = (r * sx) @ ow
         return x + out, xx[-1,:], aa, bb, pp
+
+    @MyFunction
+    def att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+
+        r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
+        k = self.mm8_seq(kx, kw, kmx, krx, kmy, kry).float()
+        v = self.mm8_seq(vx, vw, vmx, vrx, vmy, vry).float()
+
+        T = x.shape[0]
+        for t in range(T):
+            kk = k[t]
+            vv = v[t]
+            ww = t_first + kk
+            p = torch.maximum(pp, ww)
+            e1 = torch.exp(pp - p)
+            e2 = torch.exp(ww - p)
+            sx[t] = ((e1 * aa + e2 * vv) / (e1 * bb + e2)).to(dtype=x.dtype)
+            ww = t_decay + pp
+            p = torch.maximum(ww, kk)
+            e1 = torch.exp(ww - p)
+            e2 = torch.exp(kk - p)
+            aa = e1 * aa + e2 * vv
+            bb = e1 * bb + e2
+            pp = p
+        out = self.mm8_seq(r * sx, ow, omx, orx, omy, ory)
+        return x + out, xx[-1,:], aa, bb, pp
+
+    ########################################################################################################
     
     @MyFunction
-    def cuda_att_pre(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw):
+    def cuda_att_seq_pre(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw):
         T, C = x.size()
         xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
@@ -347,11 +431,34 @@ class RWKV(MyModule):
     def cuda_att_seq_post(self, x, r, y, ow):
         out = (r * y) @ ow
         return x + out
-    def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow):
+    def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         T, C = x.size()
-        xx, r, k, v = self.cuda_att_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
+        xx, r, k, v = self.cuda_att_seq_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
         y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
         out = self.cuda_att_seq_post(x, r, y, ow)
+        return out, xx, aa, bb, pp
+
+    @MyFunction
+    def cuda_att_seq_pre_i8(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+        T, C = x.size()
+        xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+        r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
+        k = self.mm8_seq(kx, kw, kmx, krx, kmy, kry)
+        v = self.mm8_seq(vx, vw, vmx, vrx, vmy, vry)
+        return xx[-1,:], r, k, v
+    @MyFunction
+    def cuda_att_seq_post_i8(self, x, r, y, ow, omx, orx, omy, ory):
+        out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
+        return x + out
+    def cuda_att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        T, C = x.size()
+        xx, r, k, v = self.cuda_att_seq_pre_i8(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry)
+        y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
+        out = self.cuda_att_seq_post_i8(x, r, y, ow, omx, orx, omy, ory)
         return out, xx, aa, bb, pp
 
     ########################################################################################################
@@ -387,53 +494,90 @@ class RWKV(MyModule):
                 wtype = dd.wtype
                 if seq_mode:
                     if 'cuda' in str(dev) and os.environ["RWKV_CUDA_ON"] == '1':
-                        ATT = self.cuda_att_seq
+                        ATT = self.cuda_att_seq if wtype != torch.uint8 else self.cuda_att_seq_i8
                     else:
-                        ATT = self.att_seq
-                    FFN = self.ffn_seq
+                        ATT = self.att_seq if wtype != torch.uint8 else self.att_seq_i8
+                    FFN = self.ffn_seq if wtype != torch.uint8 else self.ffn_seq_i8
                 else:
-                    ATT = self.att_one
-                    FFN = self.ffn_one
+                    ATT = self.att_one if wtype != torch.uint8 else self.att_one_i8
+                    FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
 
                 x = x.to(dtype=atype, device=dev)
 
-                kw = self.get_w(f'{att}key.weight', atype)
-                vw = self.get_w(f'{att}value.weight', atype)
-                rw = self.get_w(f'{att}receptance.weight', atype)
-                ow = self.get_w(f'{att}output.weight', atype)
+                kw = w[f'{att}key.weight']
+                vw = w[f'{att}value.weight']
+                rw = w[f'{att}receptance.weight']
+                ow = w[f'{att}output.weight']
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
                     vw = vw.to(device=dev, non_blocking=True)
                     rw = rw.to(device=dev, non_blocking=True)
                     ow = ow.to(device=dev, non_blocking=True)
+                kmx = w[f'{att}key.weight_mx'] if wtype == torch.uint8 else x
+                krx = w[f'{att}key.weight_rx'] if wtype == torch.uint8 else x
+                kmy = w[f'{att}key.weight_my'] if wtype == torch.uint8 else x
+                kry = w[f'{att}key.weight_ry'] if wtype == torch.uint8 else x
+                vmx = w[f'{att}value.weight_mx'] if wtype == torch.uint8 else x
+                vrx = w[f'{att}value.weight_rx'] if wtype == torch.uint8 else x
+                vmy = w[f'{att}value.weight_my'] if wtype == torch.uint8 else x
+                vry = w[f'{att}value.weight_ry'] if wtype == torch.uint8 else x
+                rmx = w[f'{att}receptance.weight_mx'] if wtype == torch.uint8 else x
+                rrx = w[f'{att}receptance.weight_rx'] if wtype == torch.uint8 else x
+                rmy = w[f'{att}receptance.weight_my'] if wtype == torch.uint8 else x
+                rry = w[f'{att}receptance.weight_ry'] if wtype == torch.uint8 else x
+                omx = w[f'{att}output.weight_mx'] if wtype == torch.uint8 else x
+                orx = w[f'{att}output.weight_rx'] if wtype == torch.uint8 else x
+                omy = w[f'{att}output.weight_my'] if wtype == torch.uint8 else x
+                ory = w[f'{att}output.weight_ry'] if wtype == torch.uint8 else x
                 x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
-                    x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
-                    ln_w=w[f'{bbb}ln1.weight'], ln_b=w[f'{bbb}ln1.bias'],
-                    k_mix=w[f'{att}time_mix_k'], v_mix=w[f'{att}time_mix_v'], r_mix=w[f'{att}time_mix_r'],
-                    t_decay = w[f'{att}time_decay'], t_first = w[f'{att}time_first'],
-                    kw=kw, vw=vw, rw=rw, ow=ow)
-                if wtype == torch.uint8 or dd.stream:
+                    x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3],
+                    w[f'{bbb}ln1.weight'], w[f'{bbb}ln1.bias'],
+                    w[f'{att}time_mix_k'], w[f'{att}time_mix_v'], w[f'{att}time_mix_r'],
+                    w[f'{att}time_decay'], w[f'{att}time_first'],
+                    kw, vw, rw, ow,
+                    kmx, krx, kmy, kry,
+                    vmx, vrx, vmy, vry,
+                    rmx, rrx, rmy, rry,
+                    omx, orx, omy, ory,
+                    )
+                if dd.stream:
                     del kw, vw, rw, ow
 
-                kw = self.get_w(f'{ffn}key.weight', atype)
-                vw = self.get_w(f'{ffn}value.weight', atype)
-                rw = self.get_w(f'{ffn}receptance.weight', atype)
+                kw = w[f'{ffn}key.weight']
+                vw = w[f'{ffn}value.weight']
+                rw = w[f'{ffn}receptance.weight']
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
                     vw = vw.to(device=dev, non_blocking=True)
                     rw = rw.to(device=dev, non_blocking=True)
+                kmx = w[f'{ffn}key.weight_mx'] if wtype == torch.uint8 else x
+                krx = w[f'{ffn}key.weight_rx'] if wtype == torch.uint8 else x
+                kmy = w[f'{ffn}key.weight_my'] if wtype == torch.uint8 else x
+                kry = w[f'{ffn}key.weight_ry'] if wtype == torch.uint8 else x
+                vmx = w[f'{ffn}value.weight_mx'] if wtype == torch.uint8 else x
+                vrx = w[f'{ffn}value.weight_rx'] if wtype == torch.uint8 else x
+                vmy = w[f'{ffn}value.weight_my'] if wtype == torch.uint8 else x
+                vry = w[f'{ffn}value.weight_ry'] if wtype == torch.uint8 else x
+                rmx = w[f'{ffn}receptance.weight_mx'] if wtype == torch.uint8 else x
+                rrx = w[f'{ffn}receptance.weight_rx'] if wtype == torch.uint8 else x
+                rmy = w[f'{ffn}receptance.weight_my'] if wtype == torch.uint8 else x
+                rry = w[f'{ffn}receptance.weight_ry'] if wtype == torch.uint8 else x                    
                 x, state[i*5+4] = FFN(
-                    x, sx=state[i*5+4],
-                    ln_w=w[f'{bbb}ln2.weight'], ln_b=w[f'{bbb}ln2.bias'],
-                    k_mix=w[f'{ffn}time_mix_k'], r_mix=w[f'{ffn}time_mix_r'],
-                    kw=kw, vw=vw, rw=rw)
-                if wtype == torch.uint8 or dd.stream:                
+                    x, state[i*5+4],
+                    w[f'{bbb}ln2.weight'], w[f'{bbb}ln2.bias'],
+                    w[f'{ffn}time_mix_k'], w[f'{ffn}time_mix_r'],
+                    kw, vw, rw,
+                    kmx, krx, kmy, kry,
+                    vmx, vrx, vmy, vry,
+                    rmx, rrx, rmy, rry,                    
+                    )
+                if dd.stream:                
                     del kw, vw, rw
-
+                
                 if self.RESCALE_LAYER > 0:
                     if (i+1) % self.RESCALE_LAYER == 0:
                         x = x / 2
-
+            
             dd = self.strategy[args.n_layer]
             x = x[-1,:] if (seq_mode and (not full_output)) else x
             x = x.to(dtype=dd.atype, device=dd.device)
@@ -442,6 +586,9 @@ class RWKV(MyModule):
             if w['head.weight'].dtype != torch.uint8:
                 x = x @ w['head.weight']
             else:
-                x = x @ self.get_w('head.weight', dd.atype)
+                if seq_mode and full_output:
+                    x = self.mm8_seq(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
+                else:
+                    x = self.mm8_one(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
 
             return x.float(), state

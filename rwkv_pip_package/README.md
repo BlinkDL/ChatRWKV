@@ -16,7 +16,7 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 # fp16 = good for GPU (!!! DOES NOT support CPU !!!)
 # fp32 = good for CPU
 # bf16 = worse accuracy, supports CPU
-# xxxi8 (example: fp16i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
+# xxxi8 (example: fp16i8, fp32i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
 #
 # We consider [ln_out+head] to be an extra layer, so L12-D768 (169M) has "13" layers, L24-D2048 (1.5B) has "25" layers, etc.
 # Strategy Examples: (device = cpu/cuda/cuda:0/cuda:1/...)
@@ -40,12 +40,10 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 #   0% VRAM = 'cpu fp32'                    # all layers cpu fp32
 #
 # Use '+' for STREAM mode, which can save VRAM too, and it is sometimes faster
-# 'cuda fp16 *10+' = first 10 layers cuda fp16, then fp16 stream the rest to it (increase 10 for better speed)
-# 'cuda fp16i8 *10 -> cuda fp16 *0+' = first 10 layers cuda fp16i8, then fp16 stream the rest to it
-# (streaming fp16i8 is very slow right now, so please only do fp16 stream like above)
+# 'cuda fp16i8 *10+' = first 10 layers cuda fp16i8, then fp16i8 stream the rest to it (increase 10 for better speed)
 #
-# Extreme STREAM: 3G VRAM is enough to run RWKV 14B (extremely slow. will be faster in future)
-# 'cuda fp16 *0+ -> cpu fp32 *1' = stream all layers cuda fp16, last 1 layer [ln_out+head] cpu fp32
+# Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
+# 'cuda fp16i8 *0+ -> cpu fp32 *1' = stream all layers cuda fp16i8, last 1 layer [ln_out+head] cpu fp32
 #
 # ########################################################################################################
 
