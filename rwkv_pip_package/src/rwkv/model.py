@@ -180,15 +180,25 @@ class RWKV(MyModule):
                         else:
                             w[x] = w[x].float()
 
-                            w[x+'_mx'] = torch.amin(w[x], dim=0) * 0.7
-                            w[x] = w[x] - w[x+'_mx']
-                            w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
-                            w[x] = w[x] - w[x+'_my']
-                            w[x+'_rx'] = torch.amax(w[x], dim=0)
-                            w[x] = w[x] / w[x+'_rx']
-                            w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
-                            w[x] = w[x] / w[x+'_ry']
-                            
+                            if w[x].shape[0] > w[x].shape[1]:
+                                w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] - w[x+'_my']
+                                w[x+'_mx'] = torch.amin(w[x], dim=0)
+                                w[x] = w[x] - w[x+'_mx']
+                                w[x+'_rx'] = torch.amax(w[x], dim=0)
+                                w[x] = w[x] / w[x+'_rx']
+                                w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] / w[x+'_ry']
+                            else:
+                                w[x+'_mx'] = torch.amin(w[x], dim=0)
+                                w[x] = w[x] - w[x+'_mx']
+                                w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] - w[x+'_my']
+                                w[x+'_rx'] = torch.amax(w[x], dim=0)
+                                w[x] = w[x] / w[x+'_rx']
+                                w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
+                                w[x] = w[x] / w[x+'_ry']
+
                             w[x] = torch.clip(torch.floor(w[x] * 256), min=0, max=255).to(dtype=torch.uint8)
                             w[x+'_mx'] = w[x+'_mx'].to(dtype=ATYPE)
                             w[x+'_rx'] = (w[x+'_rx'] / 16).to(dtype=ATYPE)
