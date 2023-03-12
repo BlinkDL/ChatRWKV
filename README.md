@@ -3,6 +3,8 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(pls always check for latest version and upgrade)**
 
+Please update ChatRWKV v2 & pip rwkv package (0.3.0) for 2x faster f16i8 (and less VRAM) and fast f16i8+ streaming.
+
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
 **RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
