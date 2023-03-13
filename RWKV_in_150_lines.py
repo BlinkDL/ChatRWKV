@@ -7,11 +7,16 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 import types, torch
 from torch.nn import functional as F
 from tokenizers import Tokenizer
+from time import time
+
+from rwkv_cpp import channel_mixing
+
+torch.manual_seed(1)
 
 tokenizer = Tokenizer.from_file("20B_tokenizer.json")
 
 args = types.SimpleNamespace()
-args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-430m/RWKV-4-Pile-430M-20220808-8066'
+args.MODEL_NAME = './RWKV-4b-Pile-436M-20230211-8012'
 args.n_layer = 24
 args.n_embd = 1024
 
@@ -28,13 +33,13 @@ class RWKV_RNN(torch.jit.ScriptModule):
         super().__init__()
         self.args = args
         self.eval() # set torch to inference mode
-        
+
         w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
         for k in w.keys():
             if      '.time_' in k: w[k] = w[k].squeeze()
             if '.time_decay' in k: w[k] = -torch.exp(w[k].float()) # the real time decay is like e^{-e^x}
             else: w[k] = w[k].float() # convert to f32 type
-        
+
         self.w = types.SimpleNamespace() # set self.w from w
         self.w.blocks = {}
         for k in w.keys(): # example: "blocks.0.att.time_first" => self.w.blocks[0].att.time_first
@@ -54,14 +59,8 @@ class RWKV_RNN(torch.jit.ScriptModule):
     def layer_norm(self, x, w):
         return F.layer_norm(x, (self.args.n_embd,), weight=w.weight, bias=w.bias)
 
-    @torch.jit.script_method
     def channel_mixing(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
-        xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
-        xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
-        state[5*i+0] = x
-        r = torch.sigmoid(rw @ xr)
-        k = torch.square(torch.relu(kw @ xk)) # square relu, primer paper
-        return r * (vw @ k)
+        return channel_mixing(x, state, i, time_mix_k, time_mix_r, kw, vw, rw)
 
     @torch.jit.script_method
     def time_mixing(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
@@ -72,7 +71,7 @@ class RWKV_RNN(torch.jit.ScriptModule):
         r = torch.sigmoid(rw @ xr)
         k = kw @ xk
         v = vw @ xv
-        
+
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
@@ -97,19 +96,19 @@ class RWKV_RNN(torch.jit.ScriptModule):
             if state == None:
                 state = torch.zeros(self.args.n_layer * 5, self.args.n_embd)
                 for i in range(self.args.n_layer): state[5*i+4] = -1e30 # -infinity
-            
+
             x = self.w.emb.weight[token]
             x = self.layer_norm(x, self.w.blocks[0].ln0)
             for i in range(self.args.n_layer):
                 att = self.w.blocks[i].att
-                x = x + self.time_mixing(self.layer_norm(x, self.w.blocks[i].ln1), state, i, 
-                    att.time_mix_k, att.time_mix_v, att.time_mix_r, att.time_first, att.time_decay, 
+                x = x + self.time_mixing(self.layer_norm(x, self.w.blocks[i].ln1), state, i,
+                    att.time_mix_k, att.time_mix_v, att.time_mix_r, att.time_first, att.time_decay,
                     att.key.weight, att.value.weight, att.receptance.weight, att.output.weight)
                 ffn = self.w.blocks[i].ffn
-                x = x + self.channel_mixing(self.layer_norm(x, self.w.blocks[i].ln2), state, i, 
-                    ffn.time_mix_k, ffn.time_mix_r, 
+                x = x + self.channel_mixing(self.layer_norm(x, self.w.blocks[i].ln2), state, i,
+                    ffn.time_mix_k, ffn.time_mix_r,
                     ffn.key.weight, ffn.value.weight, ffn.receptance.weight)
-            
+
             x = self.w.head.weight @ self.layer_norm(x, self.w.ln_out)
             return x.float(), state
 
@@ -129,25 +128,38 @@ def sample_logits(out, temperature=1.0, top_p=0.8):
 
 ########################################################################################################
 
-print(f'\nUsing CPU. Loading {args.MODEL_NAME} ...')
-model = RWKV_RNN(args)
+def run():
+    print(f'\nUsing CPU. Loading {args.MODEL_NAME} ...')
+    model = RWKV_RNN(args)
 
-print(f'\nPreprocessing context (slow version. see v2/rwkv/model.py for fast version)')
-init_state = None
-for token in tokenizer.encode(context).ids:
-    init_out, init_state = model.forward(token, init_state)
+    print(f'\nPreprocessing context (slow version. see v2/rwkv/model.py for fast version)')
+    init_state = None
+    for token in tokenizer.encode(context).ids:
+        init_out, init_state = model.forward(token, init_state)
 
-for TRIAL in range(NUM_TRIALS):
-    print(f'\n\n--[ Trial {TRIAL} ]-----------------', context, end="")
-    all_tokens = []
-    out_last = 0
-    out, state = init_out.clone(), init_state.clone()
-    for i in range(LENGTH_PER_TRIAL):
-        token = sample_logits(out, TEMPERATURE, TOP_P)
-        all_tokens += [token]
-        tmp = tokenizer.decode(all_tokens[out_last:])
-        if '\ufffd' not in tmp: # only print when we have a valid utf-8 string
-            print(tmp, end="", flush=True)
-            out_last = i + 1
-        out, state = model.forward(token, state)       
-print('\n')
+    for TRIAL in range(NUM_TRIALS):
+        print(f'\n\n--[ Trial {TRIAL} ]-----------------', context, end="")
+        all_tokens = []
+        out_last = 0
+        out, state = init_out.clone(), init_state.clone()
+        for i in range(LENGTH_PER_TRIAL):
+            token = sample_logits(out, TEMPERATURE, TOP_P)
+            all_tokens += [token]
+            tmp = tokenizer.decode(all_tokens[out_last:])
+            if '\ufffd' not in tmp: # only print when we have a valid utf-8 string
+                # print(tmp, end="", flush=True)
+                out_last = i + 1
+            out, state = model.forward(token, state)
+    print('\n')
+
+start = time()
+profile=False
+with torch.autograd.profiler.profile(enabled=profile, record_shapes=False) as prof:
+    run()
+
+if profile:
+    table_res = prof.key_averages().table(sort_by="cpu_time_total")
+    print(table_res)
+
+ttime = time() - start
+print("\n### Finishing ", NUM_TRIALS, " trials in {:.3f} sec.".format(ttime))
