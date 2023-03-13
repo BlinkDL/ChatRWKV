@@ -50,13 +50,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
         assert ry.shape == my.shape == [N, 1]
-        x = x.contiguous()
-        w = w.contiguous()
-        mx = mx.contiguous()
-        rx = rx.contiguous()
-        my = my.contiguous()
-        ry = ry.contiguous()
-        y = torch.empty((B, M), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        y = torch.empty((B, M), device=w.device, dtype=torch.float16)
         torch.ops.rwkv.mm8_seq(B, N, M, x, w, mx, rx, my, ry, y)
         return y
     @MyStatic
@@ -65,13 +59,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
         assert ry.shape == my.shape == [N, 1]
-        x = x.contiguous()
-        w = w.contiguous()
-        mx = mx.contiguous()
-        rx = rx.contiguous()
-        my = my.contiguous()
-        ry = ry.contiguous()
-        y = torch.empty((M,), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        y = torch.empty((M,), device=w.device, dtype=torch.float16)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y
 else:
@@ -202,7 +190,7 @@ class RWKV(MyModule):
                 if '.time_' in x:
                     w[x] = w[x].squeeze()
                 if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
-                    w[x] = w[x].t()
+                    w[x] = w[x].t().contiguous()
                 
                 if '.time_decay' in x: # need fp32 for this
                     w[x] = -torch.exp(w[x].float())
@@ -250,14 +238,14 @@ class RWKV(MyModule):
                     except:
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
-                    w[x] = w[x].to(device=DEVICE).contiguous()
+                    w[x] = w[x].to(device=DEVICE)
                 
                 if (dd.stream) or (DEVICE != 'cpu'):
                     try:
-                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE).contiguous()
-                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE).contiguous()
-                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE).contiguous()
-                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE).contiguous()
+                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE)
+                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE)
+                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE)
+                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE)
                     except:
                         pass
 

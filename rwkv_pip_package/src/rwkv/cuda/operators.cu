@@ -51,34 +51,45 @@ void cuda_wkv_forward(int B, int T, int C, float *w, float *u, fp16 *k, fp16 *v,
     kernel_wkv_forward<<<numBlocks, threadsPerBlock>>>(B, T, C, w, u, k, v, y, aa, bb, pp);
 }
 
-__global__ void kernel_mm8_seq(const int B, const int N, const int M,
-                    const fp16 *__restrict__ const x,
-                    const uint8_t *__restrict__ const w,
-                    const fp16 *__restrict__ const mx,
-                    const fp16 *__restrict__ const rx,
-                    const fp16 *__restrict__ const my,
-                    const fp16 *__restrict__ const ry,
-                    fp16 *__restrict__ const y) {
+__global__ void kernel_mm8_seq(
+    const int B, const int N, const int M,
+    const fp16 *__restrict__ const x, const int x_stride,
+    const uint8_t *__restrict__ const w, const int w_stride,
+    const fp16 *__restrict__ const mx,
+    const fp16 *__restrict__ const rx,
+    const fp16 *__restrict__ const my,
+    const fp16 *__restrict__ const ry,
+    fp16 *__restrict__ const y, const int y_stride) {
+
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     const int k = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < B && k < M) {
         float y_local = 0;
         for (int j = 0; j < N; ++j) {
-            y_local += x[i * N + j] * ((w[j * M + k] + 0.5f) * rx[k] * ry[j] + mx[k] + my[j]);
+            y_local += x[i * x_stride + j] * ((w[j * w_stride + k] + 0.5f) * rx[k] * ry[j] + mx[k] + my[j]);
         }
-        y[i * M + k] = y_local;
+        y[i * y_stride + k] = y_local;
     }
 }
-
-void cuda_mm8_seq(int B, int N, int M, fp16 *x, uint8_t *w, fp16 *mx, fp16 *rx, fp16 *my, fp16 *ry, fp16 *y) {
+void cuda_mm8_seq(int B, int N, int M,
+                  fp16 *x, int x_stride,
+                  uint8_t *w, int w_stride,
+                  fp16 *mx, fp16 *rx,
+                  fp16 *my, fp16 *ry,
+                  fp16 *y, int y_stride) {
     dim3 blockSize(1, 128);
     dim3 gridSize((B + blockSize.x - 1) / blockSize.x, (M + blockSize.y - 1) / blockSize.y);
-    kernel_mm8_seq<<<gridSize, blockSize>>>(B, N, M, x, w, mx, rx, my, ry, y);
+    kernel_mm8_seq<<<gridSize, blockSize>>>(B, N, M, x, x_stride, w, w_stride, mx, rx, my, ry, y, y_stride);
 }
 
-void cuda_mm8_one(int N, int M, fp16 *x, uint8_t *w, fp16 *mx, fp16 *rx, fp16 *my, fp16 *ry, fp16 *y) {
+void cuda_mm8_one(int N, int M,
+                  fp16 *x,
+                  uint8_t *w, int w_stride,
+                  fp16 *mx, fp16 *rx,
+                  fp16 *my, fp16 *ry,
+                  fp16 *y) {
     dim3 blockSize(1, 128);
     dim3 gridSize(1, (M + blockSize.y - 1) / blockSize.y);
-    kernel_mm8_seq<<<gridSize, blockSize>>>(1, N, M, x, w, mx, rx, my, ry, y);
+    kernel_mm8_seq<<<gridSize, blockSize>>>(1, N, M, x, 0, w, w_stride, mx, rx, my, ry, y, 0);
 }
