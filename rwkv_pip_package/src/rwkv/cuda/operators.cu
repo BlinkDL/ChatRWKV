@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "ATen/ATen.h"
+#include <cuda_fp16.h>
 #define MIN_VALUE (-1e38)
 typedef at::Half fp16;
 
@@ -51,15 +52,19 @@ void cuda_wkv_forward(int B, int T, int C, float *w, float *u, fp16 *k, fp16 *v,
     kernel_wkv_forward<<<numBlocks, threadsPerBlock>>>(B, T, C, w, u, k, v, y, aa, bb, pp);
 }
 
+__half *cast(fp16 *ptr) {
+    return reinterpret_cast<__half *>(ptr);
+}
+
 __global__ void kernel_mm8_seq(
     const int B, const int N, const int M,
-    const fp16 *__restrict__ const x, const int x_stride,
+    const __half *__restrict__ const x, const int x_stride,
     const uint8_t *__restrict__ const w, const int w_stride,
-    const fp16 *__restrict__ const mx,
-    const fp16 *__restrict__ const rx,
-    const fp16 *__restrict__ const my,
-    const fp16 *__restrict__ const ry,
-    fp16 *__restrict__ const y, const int y_stride) {
+    const __half *__restrict__ const mx,
+    const __half *__restrict__ const rx,
+    const __half *__restrict__ const my,
+    const __half *__restrict__ const ry,
+    __half *__restrict__ const y, const int y_stride) {
 
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     const int k = blockIdx.y * blockDim.y + threadIdx.y;
@@ -67,9 +72,13 @@ __global__ void kernel_mm8_seq(
     if (i < B && k < M) {
         float y_local = 0;
         for (int j = 0; j < N; ++j) {
-            y_local += x[i * x_stride + j] * ((w[j * w_stride + k] + 0.5f) * rx[k] * ry[j] + mx[k] + my[j]);
+            y_local += __half2float(x[i * x_stride + j]) * (
+                (w[j * w_stride + k] + 0.5f)
+                * __half2float(rx[k]) * __half2float(ry[j])
+                + __half2float(mx[k]) + __half2float(my[j])
+            );
         }
-        y[i * y_stride + k] = y_local;
+        y[i * y_stride + k] = __float2half(y_local);
     }
 }
 void cuda_mm8_seq(int B, int N, int M,
@@ -80,9 +89,39 @@ void cuda_mm8_seq(int B, int N, int M,
                   fp16 *y, int y_stride) {
     dim3 blockSize(1, 128);
     dim3 gridSize((B + blockSize.x - 1) / blockSize.x, (M + blockSize.y - 1) / blockSize.y);
-    kernel_mm8_seq<<<gridSize, blockSize>>>(B, N, M, x, x_stride, w, w_stride, mx, rx, my, ry, y, y_stride);
+    kernel_mm8_seq<<<gridSize, blockSize>>>(
+        B, N, M, cast(x), x_stride, w, w_stride,
+        cast(mx), cast(rx), cast(my), cast(ry), cast(y), y_stride);
 }
 
+#define MM8_ONE_JSPLIT 64
+
+__global__ void kernel_mm8_one(
+    const int N, const int M,
+    const __half *__restrict__ const x,
+    const uint8_t *__restrict__ const w, const int w_stride,
+    const __half *__restrict__ const mx,
+    const __half *__restrict__ const rx,
+    const __half *__restrict__ const my,
+    const __half *__restrict__ const ry,
+    __half *__restrict__ const y) {
+
+    const int k = blockIdx.y * blockDim.y + threadIdx.y;
+    const int j0 = min(N, blockIdx.x * ((N + MM8_ONE_JSPLIT - 1) / MM8_ONE_JSPLIT));
+    const int j1 = min(N, (blockIdx.x + 1) * ((N + MM8_ONE_JSPLIT - 1) / MM8_ONE_JSPLIT));
+
+    if (k < M) {
+        float y_local = 0;
+        for (int j = j0; j < j1; ++j) {
+            y_local += __half2float(x[j]) * (
+                (w[j * w_stride + k] + 0.5f)
+                * __half2float(rx[k]) * __half2float(ry[j])
+                + __half2float(mx[k]) + __half2float(my[j])
+            );
+        }
+        atomicAdd(&y[k], __float2half(y_local));
+    }
+}
 void cuda_mm8_one(int N, int M,
                   fp16 *x,
                   uint8_t *w, int w_stride,
@@ -90,6 +129,8 @@ void cuda_mm8_one(int N, int M,
                   fp16 *my, fp16 *ry,
                   fp16 *y) {
     dim3 blockSize(1, 128);
-    dim3 gridSize(1, (M + blockSize.y - 1) / blockSize.y);
-    kernel_mm8_seq<<<gridSize, blockSize>>>(1, N, M, x, 0, w, w_stride, mx, rx, my, ry, y, 0);
+    dim3 gridSize(MM8_ONE_JSPLIT, (M + blockSize.y - 1) / blockSize.y);
+    kernel_mm8_one<<<gridSize, blockSize>>>(
+        N, M, cast(x), w, w_stride,
+        cast(mx), cast(rx), cast(my), cast(ry), cast(y));
 }
