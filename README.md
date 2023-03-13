@@ -31,6 +31,7 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 ```
+![RWKV-eval](RWKV-eval.png)
 
 ![ChatRWKV](ChatRWKV.png)
 
@@ -43,8 +44,6 @@ https://github.com/gururise/rwkv_gradio RWKV Gradio
 https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
 
 https://github.com/cryscan/eloise RWKV QQ bot
-
-![RWKV-eval](RWKV-eval.png)
 
 It is not instruct-tuned, so don't directly ask it to do stuffs (unless it's a simple question).
 
