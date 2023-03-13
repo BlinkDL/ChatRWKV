@@ -216,8 +216,6 @@ class RWKV(MyModule):
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE).contiguous()
-                else:
-                    w[x] = w[x].contiguous()
                 
                 if (dd.stream) or (DEVICE != 'cpu'):
                     try:
