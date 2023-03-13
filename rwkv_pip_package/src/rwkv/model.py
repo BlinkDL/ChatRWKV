@@ -16,29 +16,64 @@ if os.environ.get('RWKV_JIT_ON') != '0':
     os.environ["RWKV_JIT_ON"] = '1'
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
+    MyStatic = torch.jit.script
 else:
     MyModule = torch.nn.Module
     def __nop(ob):
         return ob
     MyFunction = __nop
+    MyStatic = __nop
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    wkv_cuda = load(name=f"wkv_cuda", sources=[f"{current_path}/cuda/wkv_op.cpp", f"{current_path}/cuda/wkv_cuda.cu"], verbose=True, extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"])
-    class WKV(torch.autograd.Function): # only for fp16
-        @staticmethod
-        def forward(ctx, T, C, w, u, k, v, aa, bb, pp):
-            assert 1 * C % min(C, 32) == 0
-            assert k.dtype == torch.float16
-            w = w.contiguous()
-            u = u.contiguous()
-            k = k.contiguous()
-            v = v.contiguous()
-            y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
-            wkv_cuda.forward(1, T, C, w, u, k, v, y, aa, bb, pp)
-            return y, aa, bb, pp
-    def RUN_CUDA(T, C, w, u, k, v, aa, bb, pp):
-        return WKV.apply(T, C, w, u, k, v, aa, bb, pp)
+    load(
+        name=f"wkv_cuda",
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
+        verbose=True,
+        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+        is_python_module=False)
+
+    @MyStatic
+    def cuda_wkv(T: int, C: int, w, u, k, v, aa, bb, pp):
+        assert 1 * C % min(C, 32) == 0
+        assert k.dtype == torch.float16
+        w = w.contiguous()
+        u = u.contiguous()
+        k = k.contiguous()
+        v = v.contiguous()
+        y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        torch.ops.rwkv.wkv_forward(1, T, C, w, u, k, v, y, aa, bb, pp)
+        return y, aa, bb, pp
+    @MyStatic
+    def cuda_mm8_seq(B: int, N: int, M: int, x, w, mx, rx, my, ry):
+        assert x.shape == [B, N]
+        assert w.shape == [N, M]
+        assert rx.shape == mx.shape == [M]
+        assert ry.shape == my.shape == [N, 1]
+        x = x.contiguous()
+        w = w.contiguous()
+        mx = mx.contiguous()
+        rx = rx.contiguous()
+        my = my.contiguous()
+        ry = ry.contiguous()
+        y = torch.empty((B, M), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        torch.ops.rwkv.mm8_seq(B, N, M, x, w, mx, rx, my, ry, y)
+        return y
+    @MyStatic
+    def cuda_mm8_one(N: int, M: int, x, w, mx, rx, my, ry):
+        assert x.shape == [N]
+        assert w.shape == [N, M]
+        assert rx.shape == mx.shape == [M]
+        assert ry.shape == my.shape == [N, 1]
+        x = x.contiguous()
+        w = w.contiguous()
+        mx = mx.contiguous()
+        rx = rx.contiguous()
+        my = my.contiguous()
+        ry = ry.contiguous()
+        y = torch.empty((M,), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
+        return y
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
 
@@ -215,14 +250,14 @@ class RWKV(MyModule):
                     except:
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
-                    w[x] = w[x].to(device=DEVICE)
+                    w[x] = w[x].to(device=DEVICE).contiguous()
                 
                 if (dd.stream) or (DEVICE != 'cpu'):
                     try:
-                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE)
-                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE)
-                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE)
-                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE)
+                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE).contiguous()
+                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE).contiguous()
+                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE).contiguous()
+                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE).contiguous()
                     except:
                         pass
 
@@ -251,13 +286,23 @@ class RWKV(MyModule):
             if 'cuda' in args.strategy_string:
                 torch.cuda.empty_cache()
 
-    @MyFunction
-    def mm8_seq(self, x, w, mx, rx, my, ry):
-        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
-    
-    @MyFunction
-    def mm8_one(self, x, w, mx, rx, my, ry):
-        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+    if os.environ.get('RWKV_CUDA_ON') == '1':
+        @MyFunction
+        def mm8_seq(self, x, w, mx, rx, my, ry):
+            B, N, M = x.shape[0], w.shape[0], w.shape[1]
+            return cuda_mm8_seq(B, N, M, x, w, mx, rx, my, ry)
+        @MyFunction
+        def mm8_one(self, x, w, mx, rx, my, ry):
+            N, M = w.shape[0], w.shape[1]
+            return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
+    else:
+        @MyFunction
+        def mm8_seq(self, x, w, mx, rx, my, ry):
+            return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+
+        @MyFunction
+        def mm8_one(self, x, w, mx, rx, my, ry):
+            return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
 
     ########################################################################################################
 
@@ -444,7 +489,7 @@ class RWKV(MyModule):
     def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         T, C = x.size()
         xx, r, k, v = self.cuda_att_seq_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
-        y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
+        y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
         out = self.cuda_att_seq_post(x, r, y, ow)
         return out, xx, aa, bb, pp
 
@@ -467,7 +512,7 @@ class RWKV(MyModule):
     def cuda_att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         T, C = x.size()
         xx, r, k, v = self.cuda_att_seq_pre_i8(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry)
-        y, aa, bb, pp = RUN_CUDA(T, C, t_decay, t_first, k, v, aa, bb, pp)
+        y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
         out = self.cuda_att_seq_post_i8(x, r, y, ow, omx, orx, omy, ory)
         return out, xx, aa, bb, pp
 
