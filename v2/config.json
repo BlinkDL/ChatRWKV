@@ -1,0 +1,8 @@
+{
+    "strategy":"cuda fp16",
+    "Model":"../model/RWKV-4-Pile-3B-Chn-testNovel-320-ctx2048-20230307",
+    "CHAT_LANG":"Chinese",
+    "CHAT_LEN_SHORT":40,
+    "CHAT_LEN_LONG":1000,
+    "FREE_GEN_LEN":1000
+}

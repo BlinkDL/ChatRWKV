@@ -2,9 +2,12 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, copy, types, gc, sys
+import os, copy, types, gc, sys, json
 current_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f'{current_path}/../rwkv_pip_package/src')
+
+with open('./config.json','r',encoding = 'utf-8') as cfg:
+    configs = json.load(cfg)
 
 import numpy as np
 from prompt_toolkit import prompt
@@ -21,6 +24,10 @@ import torch
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
+try:
+    torch.utils.cpp_extension.CUDA_PATH = configs["CUDA_PATH"]
+except:
+    pass
 
 # Tune these below (test True/False for all of them) to find the fastest setting:
 # torch._C._jit_set_profiling_executor(True)
@@ -41,8 +48,9 @@ torch.backends.cuda.matmul.allow_tf32 = True
 #
 ########################################################################################################
 
+args.strategy = configs["strategy"]
 # args.strategy = 'cpu fp32'
-args.strategy = 'cuda fp16'
+# args.strategy = 'cuda fp16'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
 # args.strategy = 'cuda fp16i8'
 # args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
@@ -51,17 +59,18 @@ args.strategy = 'cuda fp16'
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to use CUDA kernel for seq mode (much faster)
 
-CHAT_LANG = 'English' # English // Chinese // more to come
+CHAT_LANG = configs["CHAT_LANG"] # English // Chinese // more to come
+args.MODEL_NAME = configs["Model"]
 
 # Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
 # Use '/' in model path, instead of '\'
-if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230228-ctx4096-test663'
+#if CHAT_LANG == 'English':
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230228-ctx4096-test663'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
 
-elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
+#elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-320'
@@ -69,9 +78,9 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
 PROMPT_FILE = f'{current_path}/prompt/default/{CHAT_LANG}-2.py' # -1.py for [User & Bot] (Q&A) prompt, -2.py for [Bob & Alice] (chat) prompt
 
 args.ctx_len = 1024
-CHAT_LEN_SHORT = 40
-CHAT_LEN_LONG = 150
-FREE_GEN_LEN = 200
+CHAT_LEN_SHORT = configs["CHAT_LEN_SHORT"]
+CHAT_LEN_LONG = configs["CHAT_LEN_LONG"]
+FREE_GEN_LEN = configs["FREE_GEN_LEN"]
 
 # For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
 # Explanation: https://platform.openai.com/docs/api-reference/parameter-details
