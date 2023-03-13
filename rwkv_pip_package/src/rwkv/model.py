@@ -200,10 +200,10 @@ class RWKV(MyModule):
                                 w[x] = w[x] / w[x+'_ry']
 
                             w[x] = torch.clip(torch.floor(w[x] * 256), min=0, max=255).to(dtype=torch.uint8)
-                            w[x+'_mx'] = w[x+'_mx'].to(dtype=ATYPE)
-                            w[x+'_rx'] = (w[x+'_rx'] / 16).to(dtype=ATYPE)
-                            w[x+'_my'] = w[x+'_my'].to(dtype=ATYPE)
-                            w[x+'_ry'] = (w[x+'_ry'] / 16).to(dtype=ATYPE)
+                            w[x+'_mx'] = w[x+'_mx'].to(dtype=ATYPE).contiguous()
+                            w[x+'_rx'] = (w[x+'_rx'] / 16).to(dtype=ATYPE).contiguous()
+                            w[x+'_my'] = w[x+'_my'].to(dtype=ATYPE).contiguous()
+                            w[x+'_ry'] = (w[x+'_ry'] / 16).to(dtype=ATYPE).contiguous()
                     else:
                         w[x] = w[x].to(dtype=ATYPE)
                 
@@ -216,6 +216,8 @@ class RWKV(MyModule):
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
                     w[x] = w[x].to(device=DEVICE).contiguous()
+                else:
+                    w[x] = w[x].contiguous()
                 
                 if (dd.stream) or (DEVICE != 'cpu'):
                     try:
@@ -484,11 +486,11 @@ class RWKV(MyModule):
                     dd = self.strategy[i]
                     dev = dd.device
                     atype = dd.atype
-                    state[i*5+0] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev)
-                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev)
-                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev)
-                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev) - 1e30
-                    state[i*5+4] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev)
+                    state[i*5+0] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
+                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
+                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
+                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous() - 1e30
+                    state[i*5+4] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
 
             seq_mode = len(tokens) > 1
 
