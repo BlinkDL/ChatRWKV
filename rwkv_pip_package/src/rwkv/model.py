@@ -208,21 +208,21 @@ class RWKV(MyModule):
                         w[x] = w[x].to(dtype=ATYPE)
                 
                 if 'emb.' in x:
-                    pass
+                    w[x] = w[x].contiguous()
                 elif (dd.stream) and (x.endswith('key.weight') or x.endswith('value.weight') or x.endswith('receptance.weight') or x.endswith('output.weight')):
                     try:
-                        w[x] = w[x].pin_memory() # if you see "CUDA error: out of memory" here, that's out of CPU RAM, not VRAM. Get more RAM :)
+                        w[x] = w[x].contiguous().pin_memory() # if you see "CUDA error: out of memory" here, that's out of CPU RAM, not VRAM. Get more RAM :)
                     except:
                         print('Note: You are running out of RAM. Get more CPU RAM. Now this will run much slower.')
                 elif DEVICE != 'cpu':
-                    w[x] = w[x].to(device=DEVICE)
+                    w[x] = w[x].to(device=DEVICE).contiguous()
                 
                 if (dd.stream) or (DEVICE != 'cpu'):
                     try:
-                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE)
-                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE)
-                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE)
-                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE)
+                        w[x+'_mx'] = w[x+'_mx'].to(device=DEVICE).contiguous()
+                        w[x+'_rx'] = w[x+'_rx'].to(device=DEVICE).contiguous()
+                        w[x+'_my'] = w[x+'_my'].to(device=DEVICE).contiguous()
+                        w[x+'_ry'] = w[x+'_ry'].to(device=DEVICE).contiguous()
                     except:
                         pass
 
