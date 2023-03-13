@@ -94,7 +94,8 @@ void cuda_mm8_seq(int B, int N, int M,
         cast(mx), cast(rx), cast(my), cast(ry), cast(y), y_stride);
 }
 
-#define MM8_ONE_JSPLIT 64
+#define MM8_ONE_JSPLIT 24
+#define MM8_ONE_TILE 1024
 
 __global__ void kernel_mm8_one(
     const int N, const int M,
@@ -128,7 +129,7 @@ void cuda_mm8_one(int N, int M,
                   fp16 *mx, fp16 *rx,
                   fp16 *my, fp16 *ry,
                   fp16 *y) {
-    dim3 blockSize(1, 128);
+    dim3 blockSize(1, MM8_ONE_TILE);
     dim3 gridSize(MM8_ONE_JSPLIT, (M + blockSize.y - 1) / blockSize.y);
     kernel_mm8_one<<<gridSize, blockSize>>>(
         N, M, cast(x), w, w_stride,
