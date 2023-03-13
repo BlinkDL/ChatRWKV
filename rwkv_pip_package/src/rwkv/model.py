@@ -46,6 +46,8 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         return y, aa, bb, pp
     @MyStatic
     def cuda_mm8_seq(B: int, N: int, M: int, x, w, mx, rx, my, ry):
+        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype == torch.float16
+        assert w.dtype == torch.uint8
         assert x.shape == [B, N]
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
@@ -55,6 +57,8 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         return y
     @MyStatic
     def cuda_mm8_one(N: int, M: int, x, w, mx, rx, my, ry):
+        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype == torch.float16
+        assert w.dtype == torch.uint8
         assert x.shape == [N]
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
@@ -457,9 +461,9 @@ class RWKV(MyModule):
         return x + out, xx[-1,:], aa, bb, pp
 
     ########################################################################################################
-    
+
     @MyFunction
-    def cuda_att_seq_pre(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw):
+    def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         T, C = x.size()
         xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
@@ -469,20 +473,12 @@ class RWKV(MyModule):
         r = torch.sigmoid(rx @ rw)
         k = kx @ kw
         v = vx @ vw
-        return xx[-1,:], r, k, v
-    @MyFunction
-    def cuda_att_seq_post(self, x, r, y, ow):
-        out = (r * y) @ ow
-        return x + out
-    def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        T, C = x.size()
-        xx, r, k, v = self.cuda_att_seq_pre(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw)
         y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
-        out = self.cuda_att_seq_post(x, r, y, ow)
-        return out, xx, aa, bb, pp
+        out = (r * y) @ ow
+        return x + out, xx[-1,:], aa, bb, pp
 
     @MyFunction
-    def cuda_att_seq_pre_i8(self, x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+    def cuda_att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         T, C = x.size()
         xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
@@ -492,17 +488,9 @@ class RWKV(MyModule):
         r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
         k = self.mm8_seq(kx, kw, kmx, krx, kmy, kry)
         v = self.mm8_seq(vx, vw, vmx, vrx, vmy, vry)
-        return xx[-1,:], r, k, v
-    @MyFunction
-    def cuda_att_seq_post_i8(self, x, r, y, ow, omx, orx, omy, ory):
-        out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
-        return x + out
-    def cuda_att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        T, C = x.size()
-        xx, r, k, v = self.cuda_att_seq_pre_i8(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry)
         y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
-        out = self.cuda_att_seq_post_i8(x, r, y, ow, omx, orx, omy, ory)
-        return out, xx, aa, bb, pp
+        out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
+        return x + out, xx[-1,:], aa, bb, pp
 
     ########################################################################################################
 
