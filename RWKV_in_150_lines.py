@@ -16,7 +16,7 @@ torch.manual_seed(1)
 tokenizer = Tokenizer.from_file("20B_tokenizer.json")
 
 args = types.SimpleNamespace()
-args.MODEL_NAME = './RWKV-4b-Pile-436M-20230211-8012'
+args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-430m/RWKV-4-Pile-430M-20220808-8066'
 args.n_layer = 24
 args.n_embd = 1024
 
