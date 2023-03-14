@@ -43,20 +43,21 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 # args.strategy = 'cpu fp32'
 args.strategy = 'cuda fp16'
+# args.strategy = 'cuda:0 fp16 -> cuda:1 fp16'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
 # args.strategy = 'cuda fp16i8'
 # args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16 *0+'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
-os.environ["RWKV_CUDA_ON"] = '0' # '1' to use CUDA kernel for seq mode (much faster)
+os.environ["RWKV_CUDA_ON"] = '0' # '1' to use CUDA kernel for seq mode (much faster), requires c++ compiler & cuda libraries
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
 # Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
 # Use '/' in model path, instead of '\'
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230228-ctx4096-test663'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
 
@@ -64,9 +65,13 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-320'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-865'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-2078'
 
-PROMPT_FILE = f'{current_path}/prompt/default/{CHAT_LANG}-2.py' # -1.py for [User & Bot] (Q&A) prompt, -2.py for [Bob & Alice] (chat) prompt
+# -1.py for [User & Bot] (Q&A) prompt
+# -2.py for [Bob & Alice] (chat) prompt
+# -3.py for a very long (but great) chat prompt (requires ctx8192, and set RWKV_CUDA_ON = 1 or it will be very slow)
+PROMPT_FILE = f'{current_path}/prompt/default/{CHAT_LANG}-2.py'
 
 args.ctx_len = 1024
 CHAT_LEN_SHORT = 40
