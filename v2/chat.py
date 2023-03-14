@@ -81,7 +81,7 @@ FREE_GEN_LEN = 200
 # For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
 # Explanation: https://platform.openai.com/docs/api-reference/parameter-details
 GEN_TEMP = 1.0
-GEN_TOP_P = 0.85
+GEN_TOP_P = 0.8
 GEN_alpha_presence = 0.2 # Presence Penalty
 GEN_alpha_frequency = 0.2 # Frequency Penalty
 AVOID_REPEAT = '，。：？！'
