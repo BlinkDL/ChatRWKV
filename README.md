@@ -3,7 +3,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(pls always check for latest version and upgrade)**
 
-Update ChatRWKV v2 & pip rwkv package (0.5.0) and set os.environ["RWKV_CUDA_ON"] = '1' for 1.5x speed f16i8 (and 10% less VRAM, now 14686MB for 14B instead of 16462MB  - use it to put more layers on GPU).
+Update ChatRWKV v2 & pip rwkv package (0.5.0) and set os.environ["RWKV_CUDA_ON"] = '1' for extreme speed f16i8 (23 tokens/s on 3090) (and 10% less VRAM, now 14686MB for 14B instead of 16462MB  - use it to put more layers on GPU).
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
