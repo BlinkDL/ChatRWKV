@@ -73,7 +73,7 @@ __global__ void kernel_mm8_seq(
         float y_local = 0;
         for (int j = 0; j < N; ++j) {
             y_local += __half2float(x[i * x_stride + j]) * (
-                (w[j * w_stride + k] + 0.5f)
+                (float(w[j * w_stride + k]) + 0.5f)
                 * __half2float(rx[k]) * __half2float(ry[j])
                 + __half2float(mx[k]) + __half2float(my[j])
             );
@@ -115,7 +115,7 @@ __global__ void kernel_mm8_one(
         float y_local = 0;
         for (int j = j0; j < j1; ++j) {
             y_local += __half2float(x[j]) * (
-                (w[j * w_stride + k] + 0.5f)
+                (float(w[j * w_stride + k]) + 0.5f)
                 * __half2float(rx[k]) * __half2float(ry[j])
                 + __half2float(mx[k]) + __half2float(my[j])
             );
