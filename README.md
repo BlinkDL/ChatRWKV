@@ -1,9 +1,15 @@
 # ChatRWKV
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :) **中文使用教程，请往下看，在本页面底部。**
 
-**RWKV pip package**: https://pypi.org/project/rwkv/ **(pls always check for latest version and upgrade)**
+**RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
-Update ChatRWKV v2 & pip rwkv package (0.5.0) and set os.environ["RWKV_CUDA_ON"] = '1' for extreme speed f16i8 (23 tokens/s on 3090) (and 10% less VRAM, now 14686MB for 14B instead of 16462MB, so you can put more layers on GPU).
+Update ChatRWKV v2 & pip rwkv package (0.6.0):
+
+1. The os.environ["RWKV_CUDA_ON"] = '1' mode is now 10% faster for f16i8 on all GPUs, and supports old GPUs.
+
+2. Supports "chunk_len" in PIPELINE_ARGS, which can split long inputs into chunks to save VRAM (shorter -> slower).
+
+3. v2/chat.py is doing this too (split long inputs into chunks).
 ```
 ### Note RWKV_CUDA_ON will build a CUDA kernel ("pip install ninja" first).
 ### How to build in Linux: set these and run v2/chat.py
