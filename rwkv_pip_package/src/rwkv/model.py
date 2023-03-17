@@ -63,9 +63,9 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
         assert ry.shape == my.shape == [N, 1]
-        y = torch.zeros((M,), device=w.device, dtype=torch.float16)
+        y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
-        return y
+        return y.to(dtype=torch.float16)
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
 
