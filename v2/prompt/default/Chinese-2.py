@@ -2,6 +2,8 @@ interface = ":"
 user = "User"
 bot = "Bot"
 
+# If you modify this, make sure you have newlines between user and bot words too
+
 init_prompt = f'''
 The following is a verbose and detailed conversation between an AI assistant called {bot}, and a human user called {user}. {bot} is intelligent, knowledgeable, wise and polite.
 

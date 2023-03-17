@@ -2,6 +2,8 @@ interface = ":"
 user = "James" # only for chat sample. see below for real user name
 bot = "Emma" # only for chat sample. see below for real bot name
 
+# If you modify this, make sure you have newlines between user and bot words too
+
 init_prompt = f'''
 The following is a coherent verbose detailed conversation between a girl named {bot} and her friend {user}. \
 {bot} is intelligent, empathetic, creative and cute. \
