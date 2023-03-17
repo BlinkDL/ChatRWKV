@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from tokenizers import Tokenizer
 
 class PIPELINE_ARGS():
-    def __init__(self, temperature=1.0, top_p=0.85, top_k=0, alpha_frequency=0.2, alpha_presence=0.2, token_ban=[], token_stop=[]):
+    def __init__(self, temperature=1.0, top_p=0.85, top_k=0, alpha_frequency=0.2, alpha_presence=0.2, token_ban=[], token_stop=[], tokens_per_pass=100):
         self.temperature = temperature
         self.top_p = top_p
         self.top_k = top_k
@@ -17,6 +17,7 @@ class PIPELINE_ARGS():
         self.alpha_presence = alpha_presence # Presence Penalty (as in GPT-3)
         self.token_ban = token_ban # ban the generation of some tokens
         self.token_stop = token_stop # stop generation whenever you see any token here
+        self.tokens_per_pass = tokens_per_pass # max tokens per single model.forward pass
 
 class PIPELINE():
     def __init__(self, model, WORD_NAME):
@@ -78,7 +79,11 @@ class PIPELINE():
         for i in range(token_count):
 
             # forward & adjust prob.
-            out, state = self.model.forward(self.encode(ctx) if i == 0 else [token], state)
+            tokens = self.encode(ctx) if i == 0 else [token]
+            while len(tokens) > 0:
+                out, state = self.model.forward(tokens[:args.tokens_per_pass], state)
+                tokens = tokens[args.tokens_per_pass:]
+                
             for n in args.token_ban:
                 out[n] = -float('inf')
             for n in occurrence:
