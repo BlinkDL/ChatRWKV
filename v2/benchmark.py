@@ -35,6 +35,15 @@ import torch
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
+
+# Tune these below (test True/False for all of them) to find the fastest setting:
+# torch._C._jit_set_profiling_executor(True)
+# torch._C._jit_set_profiling_mode(True)
+# torch._C._jit_override_can_fuse_on_cpu(True)
+# torch._C._jit_override_can_fuse_on_gpu(True)
+# torch._C._jit_set_texpr_fuser_enabled(False)
+# torch._C._jit_set_nvfuser_enabled(False)
+
 from torch.nn import functional as F
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
@@ -99,7 +108,7 @@ for i in range(10):
     record_time('slow')
     print(f"slow {round(time_slot['slow'], 4)}s {out.detach().cpu().numpy()}")
 
-exit(0)
+# exit(0)
 
 ########################################################################################################
 

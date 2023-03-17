@@ -38,6 +38,7 @@ os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode
 from rwkv.model import RWKV # pip install rwkv
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16i8')
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16i8 *6 -> cuda fp16 *0+ -> cpu fp32 *1')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32 *3 -> cuda fp16 *6+')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040', strategy='cpu fp32')
@@ -48,6 +49,9 @@ model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-2022
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019', strategy='cuda fp16 *0+ -> cpu fp32 *1')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096', strategy='cuda:0 fp16 *25 -> cuda:1 fp16')
 
+# out, state = model.forward([187], None)
+# print(out.detach().cpu().numpy())
+
 out, state = model.forward([187, 510, 1563, 310, 247], None)
 print(out.detach().cpu().numpy())                   # get logits
 out, state = model.forward([187, 510], None)
@@ -55,8 +59,8 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 
-print('\n')
-
+# print('\n')
+# exit(0)
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 pipeline = PIPELINE(model, "20B_tokenizer.json")
 
@@ -69,11 +73,12 @@ def my_print(s):
 # For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
 # https://platform.openai.com/docs/api-reference/parameter-details
 
-args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7,
+args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k=0, # top_k = 0 then ignore
                      alpha_frequency = 0.25,
                      alpha_presence = 0.25,
                      token_ban = [0], # ban the generation of some tokens
-                     token_stop = []) # stop generation whenever you see any token here
+                     token_stop = [], # stop generation whenever you see any token here
+                     chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
 
 ########################################################################################################
 # 1. set os.environ["RWKV_CUDA_ON"] = '1' if possible, for faster preprocess of a long ctx.
