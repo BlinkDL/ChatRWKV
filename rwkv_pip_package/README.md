@@ -63,11 +63,12 @@ def my_print(s):
 # For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
 # https://platform.openai.com/docs/api-reference/parameter-details
 
-args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100,
+args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100, # top_k = 0 then ignore
                      alpha_frequency = 0.25,
                      alpha_presence = 0.25,
                      token_ban = [0], # ban the generation of some tokens
-                     token_stop = []) # stop generation whenever you see any token here
+                     token_stop = [], # stop generation whenever you see any token here
+                     chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
 
 pipeline.generate(ctx, token_count=200, args=args, callback=my_print)
 print('\n')

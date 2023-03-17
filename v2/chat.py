@@ -34,8 +34,8 @@ torch.backends.cuda.matmul.allow_tf32 = True
 #
 # fp16 = good for GPU (!!! DOES NOT support CPU !!!)
 # fp32 = good for CPU
-# bf16 = worse accuracy, supports CPU
-# xxxi8 (example: fp16i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
+# bf16 = less accuracy, supports some CPUs
+# xxxi8 (example: fp16i8) = xxx with int8 quantization to save 50% VRAM/RAM, slightly less accuracy
 #
 # Read https://pypi.org/project/rwkv/ for Strategy Guide
 #
@@ -50,7 +50,7 @@ args.strategy = 'cuda fp16'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16 *0+'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
-os.environ["RWKV_CUDA_ON"] = '0' # '1' to use CUDA kernel for seq mode (much faster), requires c++ compiler & cuda libraries
+os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
@@ -80,11 +80,13 @@ FREE_GEN_LEN = 200
 
 # For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
 # Explanation: https://platform.openai.com/docs/api-reference/parameter-details
-GEN_TEMP = 1.0
+GEN_TEMP = 1.0 # sometimes it's a good idea to increase temp. try it
 GEN_TOP_P = 0.8
 GEN_alpha_presence = 0.2 # Presence Penalty
 GEN_alpha_frequency = 0.2 # Frequency Penalty
-AVOID_REPEAT = '，。：？！'
+AVOID_REPEAT = '，：？！'
+
+CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
 
 ########################################################################################################
 
@@ -125,9 +127,11 @@ def run_rnn(tokens, newline_adj = 0):
 
     tokens = [int(x) for x in tokens]
     model_tokens += tokens
-    out, model_state = model.forward(tokens, model_state)
-
     # print(f'### model ###\n{tokens}\n[{pipeline.decode(model_tokens)}]')
+
+    while len(tokens) > 0:
+        out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
+        tokens = tokens[CHUNK_LEN:]    
 
     out[0] = -999999999  # disable <|endoftext|>
     out[187] += newline_adj # adjust \n probability
