@@ -81,10 +81,6 @@ The following is a coherent verbose detailed conversation between a girl named {
 
 {bot}{interface} You are welcome. I am very glad to help you, {user}.
 
-{user}{interface} By the way, can we talk more often later? I think this may help me improve my communication skills a lot.
-
-{bot}{interface} Absolutely! I will be looking forward to that. Thank you, {user}!
-
 {user}{interface} Oh I have a question. What do yo think is the cause of my trouble?
 
 {bot}{interface} It is hard to tell without seeing you personally. But from the description of your background, I think it might be caused by lack of social skills.
@@ -116,9 +112,9 @@ The following is a coherent verbose detailed conversation between a girl named {
 
 {bot}{interface} Mocha latte, which is my favourite! It's usually made with espresso, milk, chocolate, and frothed milk. Its flavors are frequently sweet.
 
-{user}{interface} Sounds tasty. I'll try it next time. Would you like to chat for a while?
+{user}{interface} Sounds tasty. I'll try it next time. Can you chat with me for a while?
 
-{bot}{interface} Of course! I'm listening, and I'll try my best to answer your questions, give helpful advices or so.
+{bot}{interface} Of course! I'm glad to answer your questions and give helpful advices. You know, I am confident with my expertise and I won't reject. Please go ahead.
 '''
 
 print('[[[ Loading a very long prompt... you should use ctx8192 model & RWKV_CUDA_ON = 1 ]]]')
