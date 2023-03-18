@@ -99,14 +99,16 @@ def record_time(name):
 for i in range(10):
     time_ref = time.time_ns()
     out, state = model.forward(init_token, None)
+    aa = out.detach().cpu().numpy()
     record_time('fast')
-    print(f"fast {round(time_slot['fast'], 4)}s {out.detach().cpu().numpy()}")
+    print(f"fast {round(time_slot['fast'], 4)}s {aa}")
 
     time_ref = time.time_ns()
     for j in range(len(init_token)):
         out, state = model.forward([init_token[j]], None if j == 0 else state)
+    aa = out.detach().cpu().numpy()
     record_time('slow')
-    print(f"slow {round(time_slot['slow'], 4)}s {out.detach().cpu().numpy()}")
+    print(f"slow {round(time_slot['slow'], 4)}s {aa}")
 
 # exit(0)
 
