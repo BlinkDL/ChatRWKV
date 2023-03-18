@@ -10,6 +10,9 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 current_path = os.path.dirname(os.path.abspath(__file__))
 
+import re
+STRATEGY_REGEX = r"^(?:(?:^|->) *(?:cuda(?::[\d]+)?|cpu) (?:fp(?:16|32)|bf16)(?:i8|i4|i3)?(?: \*[\d]+\+?)? *)+$"
+
 ########################################################################################################
 
 if os.environ.get('RWKV_JIT_ON') != '0':
@@ -73,6 +76,8 @@ else:
 
 class RWKV(MyModule):
     def __init__(self, model, strategy):
+        if not re.match(STRATEGY_REGEX, strategy):
+            raise ValueError("bad strategy string, please check rwkv package page for docs")
         super().__init__()
         self.args = types.SimpleNamespace()
         args = self.args
