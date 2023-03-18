@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import types, gc, os, sys, typing as ty, re
+import types, gc, os, sys, re
 import torch
 from torch.nn import functional as F
 torch.backends.cudnn.benchmark = True
@@ -77,12 +77,7 @@ else:
 ########################################################################################################
 
 class RWKVStrategy:
-    strategy_string: str
-    report: str
-    n_layer: int
-    strategy: list[None | types.SimpleNamespace]
-    plan: list[int]
-    def __init__(self, strategy_string: str, n_layer: int) -> None:
+    def __init__(self, strategy_string, n_layer):
         strategy_string = strategy_string.strip()
         report_chunks = []
 
@@ -158,7 +153,7 @@ class RWKVStrategy:
         self.strategy = strategy
         self.plan = plan
 
-    def is_compatible(self, other: 'RWKVStrategy') -> bool:
+    def is_compatible(self, other):
         if self.n_layer != other.n_layer or len(self.strategy) != len(other.strategy):
             return False
         for i in range(len(self.strategy)):
@@ -169,16 +164,16 @@ class RWKVStrategy:
                 return False
         return True
 
-    def __str__(self) -> str:
+    def __str__(self):
         return self.report
 
-    def __getitem__(self, idx: int) -> None | types.SimpleNamespace:
+    def __getitem__(self, idx):
         return self.strategy[idx]
 
 
 class RWKV(MyModule):
     @torch.no_grad()
-    def __init__(self, model: str, strategy: str, use_pinned_memory: bool = True, verbose: bool = True) -> None:
+    def __init__(self, model, strategy, use_pinned_memory = True, verbose = True):
         super().__init__()
 
         strategy = strategy.strip()
@@ -339,7 +334,7 @@ class RWKV(MyModule):
 
 
     @classmethod
-    def get_nlayer(cls, keys: ty.Iterable[str]) -> int:
+    def get_nlayer(cls, keys):
         n_layer = 0
         for x in keys:
             layer_id = int(x.split('.', 2)[1]) if x.startswith('blocks.') else 0
@@ -347,7 +342,7 @@ class RWKV(MyModule):
         return n_layer
 
 
-    def save_preconverted(self, filename: str, format: str = 'pt'):
+    def save_preconverted(self, filename, format = 'pt'):
         valid_formats = set(('pt',))
         if format not in valid_formats:
             raise ValueError(f'Invalid format {format} - cannot save')
@@ -360,7 +355,7 @@ class RWKV(MyModule):
 
 
     @torch.no_grad()
-    def fixup_tensor_int8(self, k: str, ATYPE) -> None:
+    def fixup_tensor_int8(self, k, ATYPE):
         w = self.w
         w[k] = w[k].float()
 
