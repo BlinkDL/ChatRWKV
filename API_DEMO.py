@@ -33,7 +33,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 ########################################################################################################
 # set these before import RWKV
 os.environ['RWKV_JIT_ON'] = '1'
-os.environ["RWKV_CUDA_ON"] = '0' #  if '1' then compile CUDA kernel for seq mode (much faster)
+os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
 
 from rwkv.model import RWKV # pip install rwkv
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
