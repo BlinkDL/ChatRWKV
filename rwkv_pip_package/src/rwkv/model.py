@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import types, gc, os, time
+import types, gc, os, time, re
 import torch
 from torch.nn import functional as F
 torch.backends.cudnn.benchmark = True
@@ -74,6 +74,11 @@ else:
 class RWKV(MyModule):
     def __init__(self, model, strategy):
         super().__init__()
+
+        STRATEGY_REGEX = r"^(?:(?:^|->) *(?:cuda(?::[\d]+)?|cpu) (?:fp(?:16|32)|bf16)(?:i8|i4|i3)?(?: \*[\d]+\+?)? *)+$"
+        if not re.match(STRATEGY_REGEX, strategy):
+            raise ValueError("Invalid strategy. Please read https://pypi.org/project/rwkv/")
+
         self.args = types.SimpleNamespace()
         args = self.args
         args.MODEL_NAME = model
