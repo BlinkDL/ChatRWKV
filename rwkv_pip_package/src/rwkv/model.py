@@ -277,7 +277,7 @@ class RWKV(MyModule):
                     print(x.ljust(32), dt.rjust(4), str(w[x].device).rjust(8), shape, ' (pinned)' if w[x].is_pinned() else '')
                 else:
                     print_need_newline = True
-                    print('.', end = '', flush = True)
+                    print(f'\r[{i}/{len(keys)-1}] {x.ljust(32)} ', end = '', flush = True)
             assert len(keys) == 4 + (4+9+5) * args.n_layer, 'Error: not a RWKV-4 model (4a and 4b models are not supported as of now)'
             gc.collect()
             if 'cuda' in args.strategy_string:
