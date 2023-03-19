@@ -47,7 +47,7 @@ args.strategy = 'cuda fp16'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
 # args.strategy = 'cuda fp16i8'
 # args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
-# args.strategy = 'cuda fp16i8 *10 -> cuda fp16 *0+'
+# args.strategy = 'cuda fp16i8 *10+'
 
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
@@ -56,10 +56,13 @@ CHAT_LANG = 'English' # English // Chinese // more to come
 
 # Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
 # Use '/' in model path, instead of '\'
+# Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+    # args.MODEL_NAME = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
+    # args.MODEL_NAME = 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
 
 elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
@@ -131,7 +134,7 @@ def run_rnn(tokens, newline_adj = 0):
 
     while len(tokens) > 0:
         out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
-        tokens = tokens[CHUNK_LEN:]    
+        tokens = tokens[CHUNK_LEN:]
 
     out[0] = -999999999  # disable <|endoftext|>
     out[187] += newline_adj # adjust \n probability
