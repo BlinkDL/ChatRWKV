@@ -180,7 +180,7 @@ class RWKV(MyModule):
 
             # Load weights
             print_need_newline = False
-            for x in keys:
+            for i, x in enumerate(keys):
                 w[x].requires_grad = False
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
