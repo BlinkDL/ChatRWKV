@@ -94,6 +94,75 @@ void cuda_mm8_seq(int B, int N, int M,
         cast(mx), cast(rx), cast(my), cast(ry), cast(y), y_stride);
 }
 
+
+#if defined OPTIMIZED_MM8
+constexpr int MM8_CHUNK   =   16; // Needs to be power of 2 and <= 32 (warpSize)
+constexpr int MM8_THREADS =   64; // Needs to be multiple of 32
+constexpr int MM8_BLOCKS  = 1024;
+__global__ void kernel_mm8_one(int N, int M, __half* x, uint8_t*w, int w_stride, __half*mx, __half*rx, __half*my, __half*ry, float*y) {
+  float4 sum = {0.f,0.f,0.f,0.f};
+  int j = (blockIdx.x * blockDim.x + threadIdx.x)*4;
+  float sum_x = 0, sum_mx_x = 0;
+  for (int i = blockIdx.y * MM8_CHUNK; i < N; i += gridDim.y * MM8_CHUNK) {
+    if (j < M) {
+#pragma unroll
+      for (int k = 0; k < MM8_CHUNK; k++) {
+        float ryi = __half2float(ry[i+k]);
+        float xi  = __half2float( x[i+k]);
+        float ryxi = ryi*xi;
+        uchar4 wi = *(uchar4*)(w+(j+(i+k)*w_stride)); // Read 4 at once for efficiency
+        sum.x += (float(wi.x)+0.5f) * ryxi;
+        sum.y += (float(wi.y)+0.5f) * ryxi;
+        sum.z += (float(wi.z)+0.5f) * ryxi;
+        sum.w += (float(wi.w)+0.5f) * ryxi;
+      }
+    }
+
+    float xi = __half2float( x[i+threadIdx.x%MM8_CHUNK]);
+    float mi = __half2float(my[i+threadIdx.x%MM8_CHUNK]);
+    sum_x += xi;
+    sum_mx_x += mi*xi;
+  }
+
+  // Each thread only summed a subset, reduce so everyone has the full sum
+  for (int offset = MM8_CHUNK/2; offset > 0; offset /= 2) {
+    sum_x    += __shfl_xor_sync(0xffffffff,    sum_x, offset, MM8_CHUNK);
+    sum_mx_x += __shfl_xor_sync(0xffffffff, sum_mx_x, offset, MM8_CHUNK);
+  }
+
+  //We might need some threads with j >= M to calculate sum_x and sum_mx_x correctly, so we can't move this earlier
+  if (j >= M) return;
+
+  float2 rxi0 = __half22float2(*(half2*)(rx+j));
+  float2 rxi1 = __half22float2(*(half2*)(rx+j+2));
+  float2 mxi0 = __half22float2(*(half2*)(mx+j));
+  float2 mxi1 = __half22float2(*(half2*)(mx+j+2));
+  atomicAdd(y + j+0, sum.x * rxi0.x + sum_x * mxi0.x + sum_mx_x);
+  atomicAdd(y + j+1, sum.y * rxi0.y + sum_x * mxi0.y + sum_mx_x);
+  atomicAdd(y + j+2, sum.z * rxi1.x + sum_x * mxi1.x + sum_mx_x);
+  atomicAdd(y + j+3, sum.w * rxi1.y + sum_x * mxi1.y + sum_mx_x);
+}
+
+void cuda_mm8_one(int N, int M,
+                  fp16 *x,
+                  uint8_t *w, int w_stride,
+                  fp16 *mx, fp16 *rx,
+                  fp16 *my, fp16 *ry,
+                  float *y) {
+  assert(N%MM8_CHUNK == 0);
+  assert(M%4 == 0);
+  assert(w_stride%4 == 0);
+
+  int blocks_x = (M-1)/(MM8_THREADS*4)+1;
+  dim3 blocks(blocks_x, min(MM8_BLOCKS/blocks_x, N/MM8_CHUNK));
+
+  kernel_mm8_one<<<blocks, MM8_THREADS>>>(
+        N, M, cast(x), w, w_stride,
+        cast(mx), cast(rx), cast(my), cast(ry), y);
+}
+
+#else
+
 #define MM8_ONE_JSPLIT 24
 #define MM8_ONE_TILE 1024
 
@@ -135,3 +204,4 @@ void cuda_mm8_one(int N, int M,
         N, M, cast(x), w, w_stride,
         cast(mx), cast(rx), cast(my), cast(ry), y);
 }
+#endif
