@@ -30,7 +30,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         name=f"wkv_cuda",
         sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
         verbose=True,
-        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization", "-DOPTIMIZED_MM8"],
         is_python_module=False)
 
     @MyStatic
@@ -223,6 +223,11 @@ class RWKV(MyModule):
                     if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                         w[x] = w[x].t()
 
+                    if 'head.weight' in x:
+                      self.vocab_pad = (-w[x].shape[1])%64
+                      if self.vocab_pad:
+                        w[x] = F.pad(input=w[x], pad=(0,self.vocab_pad), mode='constant', value=0)
+
                     if '.time_decay' in x: # need fp32 for this
                         w[x] = -torch.exp(w[x].float())
                     elif '.time_first' in x: # need fp32 for this
@@ -234,24 +239,25 @@ class RWKV(MyModule):
                             else:
                                 w[x] = w[x].float()
 
+                                make_nonzero = lambda z : z+(z==0).to(z.dtype)
                                 if w[x].shape[0] > w[x].shape[1]:
                                     w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
                                     w[x] = w[x] - w[x+'_my']
                                     w[x+'_mx'] = torch.amin(w[x], dim=0)
                                     w[x] = w[x] - w[x+'_mx']
                                     w[x+'_rx'] = torch.amax(w[x], dim=0)
-                                    w[x] = w[x] / w[x+'_rx']
+                                    w[x] = w[x] / make_nonzero(w[x+'_rx'])
                                     w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
-                                    w[x] = w[x] / w[x+'_ry']
+                                    w[x] = w[x] / make_nonzero(w[x+'_ry'])
                                 else:
                                     w[x+'_mx'] = torch.amin(w[x], dim=0)
                                     w[x] = w[x] - w[x+'_mx']
                                     w[x+'_my'] = torch.amin(w[x], dim=1).unsqueeze(1)
                                     w[x] = w[x] - w[x+'_my']
                                     w[x+'_rx'] = torch.amax(w[x], dim=0)
-                                    w[x] = w[x] / w[x+'_rx']
+                                    w[x] = w[x] / make_nonzero(w[x+'_rx'])
                                     w[x+'_ry'] = torch.amax(w[x], dim=1).unsqueeze(1)
-                                    w[x] = w[x] / w[x+'_ry']
+                                    w[x] = w[x] / make_nonzero(w[x+'_ry'])
 
                                 w[x] = torch.clip(torch.floor(w[x] * 256), min=0, max=255).to(dtype=torch.uint8)
                                 w[x+'_mx'] = w[x+'_mx'].to(dtype=ATYPE).contiguous()
@@ -317,20 +323,20 @@ class RWKV(MyModule):
             if 'cuda' in args.strategy_string:
                 torch.cuda.empty_cache()
 
+    @MyFunction
+    def mm8_seq(self, x, w, mx, rx, my, ry):
+        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+
     if os.environ.get('RWKV_CUDA_ON') == '1':
-        @MyFunction
-        def mm8_seq(self, x, w, mx, rx, my, ry):
-            B, N, M = x.shape[0], w.shape[0], w.shape[1]
-            return cuda_mm8_seq(B, N, M, x, w, mx, rx, my, ry)
+#        @MyFunction
+#        def mm8_seq(self, x, w, mx, rx, my, ry): # Currently slower than naive pytorch
+#            B, N, M = x.shape[0], w.shape[0], w.shape[1]
+#            return cuda_mm8_seq(B, N, M, x, w, mx, rx, my, ry)
         @MyFunction
         def mm8_one(self, x, w, mx, rx, my, ry):
             N, M = w.shape[0], w.shape[1]
             return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
     else:
-        @MyFunction
-        def mm8_seq(self, x, w, mx, rx, my, ry):
-            return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
-
         @MyFunction
         def mm8_one(self, x, w, mx, rx, my, ry):
             return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
@@ -665,5 +671,7 @@ class RWKV(MyModule):
                     x = self.mm8_seq(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
                 else:
                     x = self.mm8_one(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
+
+            if self.vocab_pad: x = x[...,:-self.vocab_pad]
 
             return x.float(), state

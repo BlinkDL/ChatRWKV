@@ -3,13 +3,9 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
-Update ChatRWKV v2 & pip rwkv package (0.6.0):
+Update ChatRWKV v2 & pip rwkv package (0.7.0):
 
-1. The os.environ["RWKV_CUDA_ON"] = '1' mode is now 10% faster for f16i8 on all GPUs, and supports old GPUs.
-
-2. Supports "chunk_len" in PIPELINE_ARGS, which can split long inputs into chunks to save VRAM (shorter -> slower).
-
-3. v2/chat.py is doing this too (split long inputs into chunks).
+Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 ```
 ### Note RWKV_CUDA_ON will build a CUDA kernel ("pip install ninja" first).
 ### How to build in Linux: set these and run v2/chat.py
