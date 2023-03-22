@@ -71,6 +71,12 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-865'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-2078'
 
+PILE_v2_MODEL = False
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/RWKV-4-7B-alpaca-finetuned'
+# PILE_v2_MODEL = True # True False
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-200'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-50'
+
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
 # -3.py for a very long (but great) chat prompt (requires ctx8192, and set RWKV_CUDA_ON = 1 or it will be very slow)
@@ -112,7 +118,10 @@ init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 print(f'Loading model - {args.MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
-pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+if PILE_v2_MODEL:
+    pipeline = PIPELINE(model, "cl100k_base")
+else:
+    pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
 
 model_tokens = []
 model_state = None
@@ -136,8 +145,12 @@ def run_rnn(tokens, newline_adj = 0):
         out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
         tokens = tokens[CHUNK_LEN:]
 
-    out[0] = -999999999  # disable <|endoftext|>
-    out[187] += newline_adj # adjust \n probability
+    if not PILE_v2_MODEL:
+        out[0] = -999999999  # disable <|endoftext|>
+        out[187] += newline_adj # adjust \n probability
+    else:
+        out[100257] = -999999999  # disable <|endoftext|>
+        out[198] += newline_adj # adjust \n probability
     # if newline_adj > 0:
     #     out[15] += newline_adj / 2 # '.'
     if model_tokens[-1] in AVOID_REPEAT_TOKENS:
@@ -206,10 +219,25 @@ def on_message(message):
         reply_msg("Chat reset.")
         return
 
-    elif msg[:5].lower() == '+gen ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
+    elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
         if msg[:5].lower() == '+gen ':
             new = '\n' + msg[5:].strip()
+            # print(f'### prompt ###\n[{new}]')
+            model_state = None
+            model_tokens = []
+            out = run_rnn(pipeline.encode(new))
+            save_all_stat(srv, 'gen_0', out)
+
+        elif msg[:3].lower() == '+i ':
+            new = f'''
+Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{msg[4:].strip()}
+
+### Response:
+'''
             # print(f'### prompt ###\n[{new}]')
             model_state = None
             model_tokens = []

@@ -6,7 +6,6 @@ import json, time, random, os
 import numpy as np
 import torch
 from torch.nn import functional as F
-from tokenizers import Tokenizer
 
 class PIPELINE_ARGS():
     def __init__(self, temperature=1.0, top_p=0.85, top_k=0, alpha_frequency=0.2, alpha_presence=0.2, token_ban=[], token_stop=[], chunk_len=256):
@@ -22,7 +21,12 @@ class PIPELINE_ARGS():
 class PIPELINE():
     def __init__(self, model, WORD_NAME):
         self.model = model
-        self.tokenizer = Tokenizer.from_file(WORD_NAME)
+        if WORD_NAME == 'cl100k_base':
+            import tiktoken
+            self.tokenizer = tiktoken.get_encoding(WORD_NAME)
+        else:
+            from tokenizers import Tokenizer
+            self.tokenizer = Tokenizer.from_file(WORD_NAME)
 
     def refine_context(self, context):
         context = context.strip().split('\n')
@@ -35,7 +39,10 @@ class PIPELINE():
         return context
 
     def encode(self, x):
-        return self.tokenizer.encode(x).ids
+        if 'tiktoken' in str(type(self.tokenizer)):
+            return self.tokenizer.encode(x)
+        else:
+            return self.tokenizer.encode(x).ids
     
     def decode(self, x):
         return self.tokenizer.decode(x)
