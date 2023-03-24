@@ -73,6 +73,8 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen �
 
 PILE_v2_MODEL = False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/RWKV-4-7B-alpaca-finetuned'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-init'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-final'
 # PILE_v2_MODEL = True # True False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-200'
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-50'
@@ -118,10 +120,14 @@ init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 print(f'Loading model - {args.MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
-if PILE_v2_MODEL:
-    pipeline = PIPELINE(model, "cl100k_base")
-else:
+if not PILE_v2_MODEL:
     pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+    END_OF_TEXT = 0
+    END_OF_LINE = 187
+else:
+    pipeline = PIPELINE(model, "cl100k_base")
+    END_OF_TEXT = 100257
+    END_OF_LINE = 198
 
 model_tokens = []
 model_state = None
@@ -145,14 +151,9 @@ def run_rnn(tokens, newline_adj = 0):
         out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
         tokens = tokens[CHUNK_LEN:]
 
-    if not PILE_v2_MODEL:
-        out[0] = -999999999  # disable <|endoftext|>
-        out[187] += newline_adj # adjust \n probability
-    else:
-        out[100257] = -999999999  # disable <|endoftext|>
-        out[198] += newline_adj # adjust \n probability
-    # if newline_adj > 0:
-    #     out[15] += newline_adj / 2 # '.'
+    # out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
+    out[END_OF_LINE] += newline_adj # adjust \n probability
+
     if model_tokens[-1] in AVOID_REPEAT_TOKENS:
         out[model_tokens[-1]] = -999999999
     return out
@@ -286,11 +287,12 @@ Below is an instruction that describes a task. Write a response that appropriate
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            if token == END_OF_TEXT:
+                break
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
-            occurrence[187] = 0
 
             if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
                 out = run_rnn([token], newline_adj=-2)
@@ -343,11 +345,12 @@ Below is an instruction that describes a task. Write a response that appropriate
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            if token == END_OF_TEXT:
+                break
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
-            occurrence[187] = 0
             
             out = run_rnn([token], newline_adj=newline_adj)
 
