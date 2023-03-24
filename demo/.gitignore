@@ -1,0 +1,8 @@
+build
+build*
+build/
+.vs
+out
+x64
+client/CMakeLists.txt.user
+client/ChatRWKV Setup.exe

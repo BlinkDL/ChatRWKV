@@ -1,0 +1,1 @@
+flask --app src/server run -p 5000
