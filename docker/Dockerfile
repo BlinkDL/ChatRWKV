@@ -12,7 +12,8 @@ EOF
 
 RUN python /get-models.py && \
     rm -rf /get-models.py && \
-    pip install ninja rwkv==0.6.2 gradio
+    pip install ninja gradio && \
+    pip install rwkv==0.7.1 --index-url=https://pypi.org/simple
 
 RUN git clone https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio/ ChatRWKV && \
     cd ChatRWKV && git checkout 699bb36437cd15ef8da05c4f392f4ab3ea6be65d
