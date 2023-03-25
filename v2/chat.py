@@ -63,9 +63,10 @@ if CHAT_LANG == 'English':
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
     # args.MODEL_NAME = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
     # args.MODEL_NAME = 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-Instruct-test4-20230326' # this is only suitable for +i instruct
 
 elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-865'
@@ -76,8 +77,8 @@ PILE_v2_MODEL = False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-init'
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-final'
 # PILE_v2_MODEL = True # True False
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-200'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-50'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-275'
 
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
@@ -151,7 +152,6 @@ def run_rnn(tokens, newline_adj = 0):
         out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
         tokens = tokens[CHUNK_LEN:]
 
-    # out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
     out[END_OF_LINE] += newline_adj # adjust \n probability
 
     if model_tokens[-1] in AVOID_REPEAT_TOKENS:
@@ -234,10 +234,10 @@ def on_message(message):
             new = f'''
 Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
-### Instruction:
+# Instruction:
 {msg[4:].strip()}
 
-### Response:
+# Response:
 '''
             # print(f'### prompt ###\n[{new}]')
             model_state = None
@@ -345,14 +345,15 @@ Below is an instruction that describes a task. Write a response that appropriate
                 temperature=x_temp,
                 top_p=x_top_p,
             )
-            if token == END_OF_TEXT:
-                break
+            # if token == END_OF_TEXT:
+            #     break
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
             
             out = run_rnn([token], newline_adj=newline_adj)
+            out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
 
             xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
