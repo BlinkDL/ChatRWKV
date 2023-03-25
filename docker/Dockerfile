@@ -20,4 +20,5 @@ RUN git clone https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio/ ChatRWKV &&
 WORKDIR /app/ChatRWKV
 
 COPY docker/webui.py /app/ChatRWKV/app.py
+COPY docker/*.mini.py /app/ChatRWKV/
 CMD ["python", "/app/ChatRWKV/app.py"]
