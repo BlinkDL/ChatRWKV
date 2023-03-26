@@ -65,11 +65,11 @@ if CHAT_LANG == 'English':
     # args.MODEL_NAME = 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-Instruct-test4-20230326' # this is only suitable for +i instruct
 
-elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
+elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test5系列可以问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1zx/rwkv-5'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test5-20230326'
 
 PILE_v2_MODEL = False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/RWKV-4-7B-alpaca-finetuned'
@@ -335,7 +335,7 @@ Below is an instruction that describes a task. Write a response that appropriate
             elif i <= CHAT_LEN_LONG:
                 newline_adj = 0
             else:
-                newline_adj = (i - CHAT_LEN_LONG) * 0.25 # MUST END THE GENERATION
+                newline_adj = min(2, (i - CHAT_LEN_LONG) * 0.25) # MUST END THE GENERATION
 
             for n in occurrence:
                 out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
