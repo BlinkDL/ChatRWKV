@@ -122,7 +122,7 @@ __global__ void kernel_mm8_one(
 #pragma unroll
             for (int k = 0; k < MM8_CHUNK; ++k) {
                 float   x_ry_i  = __half2float(x[i + k]) * __half2float(ry[i + k]);
-                uchar4  w_ij    = *(uchar4*)(w + (i + k) * w_stride + j);
+                uchar4  w_ij    = *(uchar4*)(w + (i + k) * w_stride + j);   // Read 4 at once for efficiency
 
                 sum.x += x_ry_i * (float(w_ij.x) + 0.5f);
                 sum.y += x_ry_i * (float(w_ij.y) + 0.5f);
