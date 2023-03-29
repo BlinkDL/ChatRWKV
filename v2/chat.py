@@ -54,7 +54,7 @@ os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requ
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
-# Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
+# Download RWKV models from https://huggingface.co/BlinkDL
 # Use '/' in model path, instead of '\'
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
@@ -63,13 +63,15 @@ if CHAT_LANG == 'English':
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
     # args.MODEL_NAME = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
     # args.MODEL_NAME = 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-Instruct-test4-20230326' # this is only suitable for +i instruct
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-Instruct-test5-20230329-ctx4096' # try +i for "Alpaca instruct"
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-Instruct-test5-20230329-ctx4096' # try +i for "Alpaca instruct"
 
 elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test5系列可以问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-test5-20230326'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-663'
 
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
@@ -91,13 +93,13 @@ AVOID_REPEAT = '，：？！'
 
 CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
 
-PILE_v2_MODEL = False # ONLY FOR MY OWN TESTING. STILL TRAINING PILE_v2_MODELs
+PILE_v2_MODEL = False # ONLY FOR MY OWN TESTING
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/RWKV-4-7B-alpaca-finetuned'
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-init'
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1x/rwkv-final'
 # PILE_v2_MODEL = True # True False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-473'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
 
 ########################################################################################################
 
