@@ -186,10 +186,13 @@ class RWKV(MyModule):
                         if i == stream_i and n >= (plan[i] - stream_count):
                             strategy[n].stream = True
                         break
-                prxxx(f"{n}-{strategy[n].device}-{str(strategy[n].atype).replace('torch.','')}-{str(strategy[n].wtype).replace('torch.','')}{'-stream' if strategy[n].stream else ''}",end=' ')
+                prxxx(f"{n}\t{strategy[n].device}\t{str(strategy[n].atype).replace('torch.','')}\t{str(strategy[n].wtype).replace('torch.','')}{'-stream' if strategy[n].stream else ''}")
             prxxx()
 
             ####################### Load weights to self.w
+
+            # Add vocabulary padding
+            self.vocab_pad = (-w['head.weight'].shape[1]) % 64
 
             if not ALREADY_CONVERTED:
                 try: # precompute embedding
@@ -211,6 +214,10 @@ class RWKV(MyModule):
                 ATYPE = dd.atype
                 WTYPE = dd.wtype
 
+                # Add vocabulary padding
+                if x in ['head.weight', 'head.weight_rx', 'head.weight_mx']:
+                    w[x] = F.pad(input=w[x], pad=(0,self.vocab_pad), mode='constant', value=0)
+
                 if not ALREADY_CONVERTED:
                     if self.RESCALE_LAYER > 0:
                         if 'att.output.weight' in x:
@@ -222,11 +229,6 @@ class RWKV(MyModule):
                         w[x] = w[x].squeeze()
                     if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                         w[x] = w[x].t()
-
-                    if 'head.weight' in x:
-                      self.vocab_pad = (-w[x].shape[1])%64
-                      if self.vocab_pad:
-                        w[x] = F.pad(input=w[x], pad=(0,self.vocab_pad), mode='constant', value=0)
 
                     if '.time_decay' in x: # need fp32 for this
                         w[x] = -torch.exp(w[x].float())
@@ -288,9 +290,7 @@ class RWKV(MyModule):
                             pass
 
                 if 'ffn.value.weight' in x:
-                    gc.collect()
-                    if 'cuda' in args.strategy_string:
-                        torch.cuda.empty_cache()
+                    self.clear_cache()
 
                 shape = [i for i in w[x].shape if i != 1]
                 if len(shape) > 1:
@@ -318,10 +318,13 @@ class RWKV(MyModule):
                 torch.save(w, convert_and_save_and_exit)
                 prxxx(f'Converted and saved. Now this will exit.')
                 exit(0)
-            
-            gc.collect()
-            if 'cuda' in args.strategy_string:
-                torch.cuda.empty_cache()
+
+    def clear_cache(self):
+        gc.collect()
+        if 'cuda' in self.args.strategy_string:
+            torch.cuda.empty_cache()
+
+    ########################################################################################################
 
     @MyFunction
     def mm8_seq(self, x, w, mx, rx, my, ry):
