@@ -3,7 +3,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **HuggingFace Gradio Demo (14B ctx8192)**: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
 
-Raven (7B finetuned on Alpaca) Demo: https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B
+**Raven** (7B finetuned on Alpaca and more) Demo: https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B
 
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
