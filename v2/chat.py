@@ -54,22 +54,23 @@ os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requ
 
 CHAT_LANG = 'English' # English // Chinese // more to come
 
-# Download RWKV-4 models from https://huggingface.co/BlinkDL (don't use Instruct-test models unless you use their prompt templates)
+# Download RWKV models from https://huggingface.co/BlinkDL
 # Use '/' in model path, instead of '\'
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v6-Eng-20230401-ctx4096' # try +i for "Alpaca instruct"
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096' # try +i for "Alpaca instruct"
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
     # args.MODEL_NAME = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
-    # args.MODEL_NAME = 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
 
-elif CHAT_LANG == 'Chinese': # testNovel系列是网文模型，请只用 +gen 指令续写。test4 系列可以问答（只用了小中文语料微调，纯属娱乐）
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-1535-ctx2048-20230306'
+elif CHAT_LANG == 'Chinese': # testNovel系列是小说模型，请只用 +gen 指令续写。Raven系列可以对话和问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-ChnEng-20230401-ctx2048' # try +i for "Alpaca instruct"
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/1.5-run1z/rwkv-865'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-2078'
+    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-663'
 
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
@@ -90,6 +91,12 @@ GEN_alpha_frequency = 0.2 # Frequency Penalty
 AVOID_REPEAT = '，：？！'
 
 CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
+
+PILE_v2_MODEL = False # ONLY FOR MY OWN TESTING
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-245'
+# PILE_v2_MODEL = True # True False
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
 
 ########################################################################################################
 
@@ -112,7 +119,14 @@ init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 print(f'Loading model - {args.MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
-pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+if not PILE_v2_MODEL:
+    pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+    END_OF_TEXT = 0
+    END_OF_LINE = 187
+else:
+    pipeline = PIPELINE(model, "cl100k_base")
+    END_OF_TEXT = 100257
+    END_OF_LINE = 198
 
 model_tokens = []
 model_state = None
@@ -136,10 +150,8 @@ def run_rnn(tokens, newline_adj = 0):
         out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
         tokens = tokens[CHUNK_LEN:]
 
-    out[0] = -999999999  # disable <|endoftext|>
-    out[187] += newline_adj # adjust \n probability
-    # if newline_adj > 0:
-    #     out[15] += newline_adj / 2 # '.'
+    out[END_OF_LINE] += newline_adj # adjust \n probability
+
     if model_tokens[-1] in AVOID_REPEAT_TOKENS:
         out[model_tokens[-1]] = -999999999
     return out
@@ -206,10 +218,25 @@ def on_message(message):
         reply_msg("Chat reset.")
         return
 
-    elif msg[:5].lower() == '+gen ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
+    elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
         if msg[:5].lower() == '+gen ':
             new = '\n' + msg[5:].strip()
+            # print(f'### prompt ###\n[{new}]')
+            model_state = None
+            model_tokens = []
+            out = run_rnn(pipeline.encode(new))
+            save_all_stat(srv, 'gen_0', out)
+
+        elif msg[:3].lower() == '+i ':
+            new = f'''
+Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+# Instruction:
+{msg[3:].strip()}
+
+# Response:
+'''
             # print(f'### prompt ###\n[{new}]')
             model_state = None
             model_tokens = []
@@ -258,11 +285,12 @@ def on_message(message):
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            if token == END_OF_TEXT:
+                break
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
-            occurrence[187] = 0
 
             if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
                 out = run_rnn([token], newline_adj=-2)
@@ -306,7 +334,7 @@ def on_message(message):
             elif i <= CHAT_LEN_LONG:
                 newline_adj = 0
             else:
-                newline_adj = (i - CHAT_LEN_LONG) * 0.25 # MUST END THE GENERATION
+                newline_adj = min(2, (i - CHAT_LEN_LONG) * 0.25) # MUST END THE GENERATION
 
             for n in occurrence:
                 out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
@@ -315,13 +343,15 @@ def on_message(message):
                 temperature=x_temp,
                 top_p=x_top_p,
             )
+            # if token == END_OF_TEXT:
+            #     break
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
-            occurrence[187] = 0
             
             out = run_rnn([token], newline_adj=newline_adj)
+            out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
 
             xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues

@@ -3,6 +3,8 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **HuggingFace Gradio Demo (14B ctx8192)**: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
 
+**Raven** (7B finetuned on Alpaca and more) Demo: https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B
+
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
 Update ChatRWKV v2 & pip rwkv package (0.7.0):
@@ -48,6 +50,8 @@ print(out.detach().cpu().numpy())                   # same result as above
 Cool Community RWKV Projects:
 
 https://pypi.org/project/rwkvstic/ pip package (with 8bit & offload for low VRAM GPUs)
+
+**https://github.com/saharNooby/rwkv.cpp rwkv.cpp for fast CPU reference**
 
 https://github.com/gururise/rwkv_gradio RWKV Gradio
 

@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Main.qml</file>
+        <file>NewChatButton.qml</file>
+        <file>Writing.qml</file>
+        <file>MultipleLineInput.qml</file>
+        <file>Style.js</file>
+        <file>CursorDelegate.qml</file>
+        <file>CustomSlider.qml</file>
+        <file>CustomImage.qml</file>
+        <file>CustomText.qml</file>
+        <file>NumberInput.qml</file>
+        <file>InteractiveWindow.qml</file>
+        <file>Chat.qml</file>
+        <file>ChatItemBase.qml</file>
+        <file>ChatItemText.qml</file>
+        <file>ChatLable.qml</file>
+        <file>ChatList.qml</file>
+    </qresource>
+</RCC>
