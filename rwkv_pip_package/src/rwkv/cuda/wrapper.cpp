@@ -1,6 +1,8 @@
 #include <torch/extension.h>
 #include "ATen/ATen.h"
 #include <iostream>
+#include <c10/cuda/CUDAGuard.h>
+
 typedef at::Half fp16;
 
 void cuda_wkv_forward(int B, int T, int C, float *w, float *u, fp16 *k, fp16 *v, fp16 *y, float *aa, float *bb, float *pp);
@@ -18,6 +20,7 @@ void cuda_mm8_one(int N, int M,
                   float *y);
 
 void wkv_forward(int64_t B, int64_t T, int64_t C, torch::Tensor &w, torch::Tensor &u, torch::Tensor &k, torch::Tensor &v, torch::Tensor &y, torch::Tensor &aa, torch::Tensor &bb, torch::Tensor &pp) {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(w));
     cuda_wkv_forward(B, T, C, w.data_ptr<float>(), u.data_ptr<float>(), k.data_ptr<fp16>(), v.data_ptr<fp16>(), y.data_ptr<fp16>(), aa.data_ptr<float>(), bb.data_ptr<float>(), pp.data_ptr<float>());
 }
 void mm8_seq(int64_t B, int64_t N, int64_t M,
@@ -30,6 +33,7 @@ void mm8_seq(int64_t B, int64_t N, int64_t M,
     assert(mx.stride(0) == 1 && rx.stride(0) == 1);
     assert(my.stride(0) == 1 && ry.stride(0) == 1);
     assert(y.stride(1) == 1);
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(w));
     cuda_mm8_seq(
         B, N, M,
         x.data_ptr<fp16>(), x.stride(0),
@@ -48,6 +52,7 @@ void mm8_one(int64_t N, int64_t M,
     assert(mx.stride(0) == 1 && rx.stride(0) == 1);
     assert(my.stride(0) == 1 && ry.stride(0) == 1);
     assert(y.stride(0) == 1);
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(w));
     cuda_mm8_one(
         N, M,
         x.data_ptr<fp16>(),
