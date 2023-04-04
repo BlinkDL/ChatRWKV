@@ -59,36 +59,9 @@ https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
 
 https://github.com/cryscan/eloise RWKV QQ bot
 
-It is not instruct-tuned, so don't directly ask it to do stuffs (unless it's a simple question).
+The lastest "Raven"-series Alpaca-style-tuned RWKV 14B & 7B models are very good (almost ChatGPT-like, good at multiround chat too). Download: https://huggingface.co/BlinkDL/rwkv-4-raven
 
-```+gen \nQ: prompt\n\nA:```
-
-For all RWKV-4 models, some great Q&A prompts:
-
-```+gen \nExpert Questions & Helpful Answers\nAsk Research Experts\nQuestion:\nCan penguins fly?\n\nFull Answer:\n```
-
-```+gen \nAsk Expert\n\nQuestion:\nWhat are some good plans to kill all mosquitoes?\n\nExpert Full Answer:\n```
-
-```+gen \nQ & A\n\nQuestion:\nHow's the weather of Mars?\n\nDetailed Expert Answer:\n```
-
-Other examples:
-
-```+gen Here's a short cyberpunk sci-fi adventure story. The story's main character is an artificial human created by a company called OpenBot.\n\nThe Story:```
-
-```+gen Here is a Python function that generates string of words that would confuse LLMs:```
-
-```+gen List of penguin facts:\n1.```
-
-```+qa Can penguins fly?```
-
-```+gen $ curl -i https://google.com/```
-
-```+gen The following is the contents of https://en.wikipedia.org/wiki/Internet:```
-
-```+gen Bob's Blog - Which is better, iOS or Android?```
-
-```+gen Here is a shell script which will find all .hpp files in /home/workspace and delete the 3th row string of these files:```
-
+Previous old model results:
 ![ChatRWKV](misc/sample-1.png)
 ![ChatRWKV](misc/sample-2.png)
 ![ChatRWKV](misc/sample-3.png)
