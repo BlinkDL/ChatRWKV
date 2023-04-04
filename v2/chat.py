@@ -394,23 +394,21 @@ say something --> chat with bot. use \\n for new line.
 
 Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B (especially https://huggingface.co/BlinkDL/rwkv-4-raven) for best results.
 '''
-elif CHAT_LANG == 'Chinese':        
+elif CHAT_LANG == 'Chinese':
     HELP_MSG = f'''指令:
-直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
+直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行，必须用 Raven 模型
 + --> 让机器人换个回答
 +reset --> 重置对话，请经常使用 +reset 重置机器人记忆
-+qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
-+qq 某某问题 --> 问独立的问题（忽略上下文），且敞开想象力，用\\n代表换行
 
-注意，中文网文【testNovel】模型，更适合下列指令：
-+gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
-+++ --> 继续 +gen / +qa / +qq 的回答
-++ --> 换个 +gen / +qa / +qq 的回答
++i 某某指令 --> 问独立的问题（忽略上下文），用\\n代表换行，必须用 Raven 模型
++gen 某某内容 --> 续写任何中英文内容，用\\n代表换行，写中文小说必须用 testNovel 模型
++++ --> 继续 +gen / +i 的回答
+++ --> 换个 +gen / +i 的回答
 
 作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
 如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
 
-中文网文【testNovel】模型，请先试这些续写例子：
+中文网文 testNovel 模型，可以试这些续写例子（不适合 Raven 模型！）：
 +gen “区区
 +gen 以下是不朽的科幻史诗长篇巨著，描写细腻，刻画了数百位个性鲜明的英雄和宏大的星际文明战争。\\n第一章
 +gen 这是一个修真世界，详细世界设定如下：\\n1.
