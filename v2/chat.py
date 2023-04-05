@@ -67,7 +67,7 @@ if CHAT_LANG == 'English':
 
 elif CHAT_LANG == 'Chinese': # testNovel系列是小说模型，请只用 +gen 指令续写。Raven系列可以对话和问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-ChnEng-20230401-ctx2048' # try +i for "Alpaca instruct"
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v7-ChnEng-20230404-ctx2048' # try +i for "Alpaca instruct"
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v7-ChnEng-20230404-ctx2048' # try +i for "Alpaca instruct"
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
@@ -94,7 +94,7 @@ AVOID_REPEAT = '，：？！'
 CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
 
 PILE_v2_MODEL = False # ONLY FOR MY OWN TESTING
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-30'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-65'
 # PILE_v2_MODEL = True # True False
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
 # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
