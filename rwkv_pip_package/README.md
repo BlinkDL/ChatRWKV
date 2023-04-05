@@ -38,6 +38,7 @@ os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requ
 #  44% VRAM = 'cuda fp16i8 -> cpu fp32 *3'  # most layers cuda fp16i8, last 3 layers cpu fp32
 #  ...
 #   0% VRAM = 'cpu fp32'                    # all layers cpu fp32
+#   0% VRAM = 'cpu bf16'                    # most layers cpu bf16
 #
 # Use '+' for STREAM mode, which can save VRAM too, and it is sometimes faster
 # 'cuda fp16i8 *10+' = first 10 layers cuda fp16i8, then fp16i8 stream the rest to it (increase 10 for better speed)
@@ -45,6 +46,8 @@ os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requ
 # Extreme STREAM: 3G VRAM is enough to run RWKV 14B (slow. will be faster in future)
 # 'cuda fp16i8 *0+ -> cpu fp32 *1' = stream all layers cuda fp16i8, last 1 layer [ln_out+head] cpu fp32
 #
+# If you want to use only RAM and cpu inference and have 35 GB RAM or more and want to load the 14B model,
+# 'cpu bf16'  is worth trying.
 # ########################################################################################################
 
 from rwkv.model import RWKV
