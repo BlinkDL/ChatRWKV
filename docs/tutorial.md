@@ -1,5 +1,7 @@
 # How to run ChatRWKV step-by-step guide
 
+This is a community guide. You are welcome to improve it.
+
 In this tutorial, we will guide you through the process of running ChatRWKV, a conversational interface to the RWKV models. We will cover the steps necessary to download the source code, create a virtual environment, install requisites, and launch ChatV2. Additionally, we'll show you how to customize ChatV2 to get the best experience possible.
 
 ## Prerequisites
@@ -15,7 +17,7 @@ First, open a terminal and move to your prefered directory (in this example, we 
 
 ```sh
 cd ~/dev
-git clone https://github.com/BlinkDL/ChatRWKV.git
+git clone https://github.com/BlinkDL/ChatRWKV
 ```
 
 This will clone the ChatRWKV repository to your local machine.
@@ -44,7 +46,7 @@ This will install all required libraries to run ChatRWKV v2.
 Visit Hugging Face and download the model of your choice. You can test some of these models before downloading them locally:
 
 - [RWKV-4-Pile-14B-20230313-ctx8192-test1050](https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio): trained on the Pile, with a context of 8192 tokens. Not optimized for conversations.
-- [Raven - RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096](https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B): trained on Alpaca datasets and more, with a context size of 4096 tokens. Optimized for instruction based interactions.
+- [Raven - RWKV-4-Raven-7B-v7-Eng-20230404-ctx4096](https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B): trained on Alpaca datasets and more, with a context size of 4096 tokens. Optimized for instruction based interactions.
 
 Make sure to check the prompt examples at the bottom of each page, so you can get used to the prompting style required for each model. Please note, that only the Raven model has been tuned for chat conversations, so other models in the RWKV-4 family will not return proper answers when asked in a conversational style.
 
@@ -69,44 +71,41 @@ Once we have downloaded our model, we need to customize chat.py to point to the 
 
 ```python
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = './models/rwkv-4-raven/RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096.pth' # try +i for "Alpaca instruct"
+    args.MODEL_NAME = './models/rwkv-4-raven/RWKV-4-Raven-7B-v7-Eng-20230404-ctx4096.pth' # try +i for "Alpaca instruct"
 ```
 
 ### Strategy
 
 Depending on your GPU/CPU configuration you will need to set a strategy for the execution. GPUs are way faster than CPU, so the overall goal is to fit as many layers as possible in the GPU.
 
-Check the following table for an overview of the different models (using args.ctx_len = 1024):
+Check the following table for an overview of the different models:
 
 | Model                                  | Number of layers | Strategy | Average VRAM in GPU per layer | Total VRAM required |
 |----------------------------------------|------------------|----------|-------------------------------|---------------------|
-| RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096 |               33 |   fp16i8 |                270 MB aprox. |            9825 MB |
+| RWKV-4-Raven-7B-v7-Eng-20230404-ctx4096 |               33 |   fp16i8 |                270 MB aprox. |            9825 MB |
 | RWKV-4-Pile-14B-20230313-ctx8192-test1050.pth |         41 |   fp16i8 |                 354 MB aprox. |           14500 MB |
 
-As a rule of thumb, fp16i8 will require 50% less memory that fp16. Given our goal is to load the model to the GPU memory, we could fit the 33 layers of the Raven-7B in a card with 12 Gb of VRAM (like RTX2060 or RTX3060). To do so, we should configure the following strategy:
+(Note: you can save 1~2G VRAM if you set os.environ["RWKV_CUDA_ON"] = '1')
+
+As a rule of thumb, fp16i8 will require ~50% less memory than fp16. Given our goal is to load the model to the GPU memory, we could fit the 33 layers of the Raven-7B in a card with 12 Gb of VRAM (like RTX3060). To do so, we should configure the following strategy:
 
 ```python
-args.strategy = 'cuda fp16i8'
+args.strategy = 'cuda fp16i8 *25 -> cuda fp16' # here we run the first 25 layers in fp16i8, and last 8 layers in fp16
+# Note: fp16 has better precision, so use more fp16 layers if possible
 ```
 
 To load the 14B version, we need to offload some of the layers to the CPU/main memory using the following strategy parameter:
 ```python
-args.strategy = 'cuda fp16i8 *28 -> cpu fp32'
-```
-
-If we had a RTX3090 with 24 GB, it would not be necessary to offload any layer. However, if we wanted to load the full fp16 weights, we should then offload some layers to the CPU (or to a second GPU). To calculate the number of layers required (assuming fp16 takes double the VRAM of the fp16i8), let's multiply the number of layers 41 per the VRAM per layer 710 MB, to get a total of 29110 MB (around 29 GB of VRAM). 
-
-To fit the model in a 24 Gb VRAM card, we need to substract 1 Gb (to the base operating system) and then divide the remaing VRAM by the layer size: (23 * 1024)  / 710 = 23552 / 710 = 33,17 layers. This would be the required strategy to load the model in fp16:
-
-```python
-args.strategy = 'cuda fp16i8 *33 -> cpu fp32'
+args.strategy = 'cuda fp16i8 *26 -> cpu fp32' # run 26 layers on GPU, and 15 layers on CPU
+or
+args.strategy = 'cuda fp16i8 *25+' # keep 27 layers on GPU, and stream the rest to GPU (this is likely faster)
 ```
 
 For extended information about the strategies, please check [rwkv pip repository](https://pypi.org/project/rwkv/)
 
 ### Enable CUDA
 
-Setting RWKV_CUDA_ON to 1 will compile a CUDA kernel, making the model run faster (10x faster according to the comments). This is the best performance improvement you can do to get faster results, by replacing a single digit.
+Setting RWKV_CUDA_ON to 1 will compile a CUDA kernel, making the model run faster (10x faster for long inputs), and can save 1~2G VRAM. This is the best performance improvement you can do to get faster results.
 
 Make sure your chat.py includes this line:
 
