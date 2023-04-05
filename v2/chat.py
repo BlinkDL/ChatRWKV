@@ -2,26 +2,86 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+import argparse
 import os, copy, types, gc, sys
+
 current_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 
+import logging
 import numpy as np
 from prompt_toolkit import prompt
-try:
-    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
-except:
-    pass
+
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
-args = types.SimpleNamespace()
+
+logger = logging.getLogger(__name__)
 
 print('\n\nChatRWKV v2 https://github.com/BlinkDL/ChatRWKV')
 
+parser = argparse.ArgumentParser()
+# Chat setup
+parser.add_argument('--chat_lang', type=str, default='English',
+                    help='Chat language. One of: English,Chinese. More to come')
+parser.add_argument('--model_name', type=str, default=None,
+    help='Path to model weights, otherwise will try default. Download RWKV models from https://huggingface.co/BlinkDL'
+)
+parser.add_argument('--prompt_version', type=str, default=2,
+    help="1 for [User & Bot] (Q&A), [Bob & Alice] (chat),"
+        "3 for a very long (but great) chat prompt (requires ctx8192, and set RWKV_CUDA_ON = 1 or it will be very slow)"
+)
+parser.add_argument("--visible_devices", type=str, default=None, help="set CUDA_VISIBLE_DEVICES to value")
+
+# model setup
+parser.add_argument('--ctx_len', type=int, default=1024, help='Model context length')
+parser.add_argument('--chat_len_short', type=int, default=40, help='')
+parser.add_argument('--chat_len_long', type=int, default=150, help='')
+parser.add_argument('--free_gen_length', type=int, default=200, help='')
+parser.add_argument('--pile_v2_model', type=int, default=0, help='Only for my own testing')
+
+# For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
+# Explanation: https://platform.openai.com/docs/api-reference/parameter-details
+parser.add_argument('--gen_temp', type=float, default=1.0,
+                    help="Temperature for sampling. Sometimes it's a good idea to increase temp. try it")
+parser.add_argument('--gen_top_p', type=float, default=0.8, help='Top-probability for sampling')
+parser.add_argument('--gen_alpha_presence', type=float, default=0.2, help='Presence Penalty for sampling')
+parser.add_argument('--gen_alpha_frequency', type=float, default=0.2, help='Frequency Penalty for sampling')
+
+# Infra settings
+parser.add_argument('--strategy', type=str, default='cuda fp16',
+    help='Weight device (cpu,cuda), types (fp32,fp16), quantization (i8), streaming (+), indexing(*10) etc. Examples: '
+        'cpu fp32 // cuda fp16 // cuda fp16i8 // cuda fp16i8 *10 -> cuda fp16 // cuda fp16i8 -> cpu fp32 *10 // cuda fp16i8 *10+'
+)
+parser.add_argument('--rwkv_cuda_on', type=int, default=0,
+                    help='1 to compile CUDA kernel (10x faster), requires c++ compiler')
+parser.add_argument('--rwkv_jit_on', type=int, default=1, help="'1' or '0', please use torch 1.13+ and benchmark speed")
+parser.add_argument('--chunk_len', type=int, default=256,
+                    help='Split input into chunks to save VRAM (shorter -> slower)')
+
+args = parser.parse_args()
+
+os.environ['RWKV_CUDA_ON'] = str(args.rwkv_cuda_on)
+os.environ['RWKV_JIT_ON'] = str(args.rwkv_jit_on)
+
+# Hardware setup
+try:
+    if args.visible_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_devices
+except:
+    pass
+
 import torch
+
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 
+if "cuda" in args.strategy and not torch.cuda.is_available():
+    logger.warning(f"Could not detect CUDA devices. Setting strategy to CPU.")
+    args.strategy = "cpu fp32"
+
+#########################
+# Hardware settings
+##########################
 # Tune these below (test True/False for all of them) to find the fastest setting:
 # torch._C._jit_set_profiling_executor(True)
 # torch._C._jit_set_profiling_mode(True)
@@ -41,67 +101,40 @@ torch.backends.cuda.matmul.allow_tf32 = True
 #
 ########################################################################################################
 
-# args.strategy = 'cpu fp32'
-args.strategy = 'cuda fp16'
-# args.strategy = 'cuda:0 fp16 -> cuda:1 fp16'
-# args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
-# args.strategy = 'cuda fp16i8'
-# args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
-# args.strategy = 'cuda fp16i8 *10+'
 
-os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
-os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
-
-CHAT_LANG = 'English' # English // Chinese // more to come
-
-# Download RWKV models from https://huggingface.co/BlinkDL
 # Use '/' in model path, instead of '\'
-# Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
-if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v7-Eng-20230404-ctx4096' # try +i for "Alpaca instruct"
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v7-Eng-20230404-ctx4096' # try +i for "Alpaca instruct"
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
-    # args.MODEL_NAME = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
+# Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM
+if args.chat_lang == 'English' and args.model_name is None:
+    args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v6-Eng-20230404-ctx4096'  # try +i for "Alpaca instruct"
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096' # try +i for "Alpaca instruct"
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+    # args.model_name = 'cuda_fp16_RWKV-4-Pile-7B-20230109-ctx4096' # use convert_model.py for faster loading & saves CPU RAM
 
-elif CHAT_LANG == 'Chinese': # testNovel系列是小说模型，请只用 +gen 指令续写。Raven系列可以对话和问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v7-ChnEng-20230404-ctx2048' # try +i for "Alpaca instruct"
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v7-ChnEng-20230404-ctx2048' # try +i for "Alpaca instruct"
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
-    # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-663'
+# testNovel系列是小说模型，请只用 +gen 指令续写。Raven系列可以对话和问答，推荐用 +i 做长问答（只用了小中文语料，纯属娱乐）
+elif args.chat_lang == 'Chinese' and args.model_name is None:
+    args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-EngChn-testNovel-done-ctx2048-20230317'
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-ChnEng-20230401-ctx2048' # try +i for "Alpaca instruct"
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v6-ChnEng-20230401-ctx2048' # try +i for "Alpaca instruct"
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
+    # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
+    # args.model_name = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-663'
 
-# -1.py for [User & Bot] (Q&A) prompt
-# -2.py for [Bob & Alice] (chat) prompt
-# -3.py for a very long (but great) chat prompt (requires ctx8192, and set RWKV_CUDA_ON = 1 or it will be very slow)
-PROMPT_FILE = f'{current_path}/prompt/default/{CHAT_LANG}-2.py'
+# ONLY FOR MY OWN TESTING
+args.pile_v2_model = bool(args.pile_v2_model)  # False
+# args.model_name = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-245'
+# args.model_name = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
+# args.model_name = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
 
-args.ctx_len = 1024
-CHAT_LEN_SHORT = 40
-CHAT_LEN_LONG = 150
-FREE_GEN_LEN = 200
 
-# For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
-# Explanation: https://platform.openai.com/docs/api-reference/parameter-details
-GEN_TEMP = 1.0 # sometimes it's a good idea to increase temp. try it
-GEN_TOP_P = 0.8
-GEN_alpha_presence = 0.2 # Presence Penalty
-GEN_alpha_frequency = 0.2 # Frequency Penalty
+PROMPT_FILE = f'{current_path}/prompt/default/{args.chat_lang}-{args.prompt_version}.py'
 AVOID_REPEAT = '，：？！'
 
-CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
-
-PILE_v2_MODEL = False # ONLY FOR MY OWN TESTING
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-65'
-# PILE_v2_MODEL = True # True False
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/1.5-run1/rwkv-601'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
 
 ########################################################################################################
 
-print(f'\n{CHAT_LANG} - {args.strategy} - {PROMPT_FILE}')
+print(f'\n{args.chat_lang} - {args.strategy} - {PROMPT_FILE}')
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
 
@@ -118,9 +151,9 @@ init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 
 # Load Model
 
-print(f'Loading model - {args.MODEL_NAME}')
-model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
-if not PILE_v2_MODEL:
+print(f'Loading model - {args.model_name}')
+model = RWKV(model=args.model_name, strategy=args.strategy)
+if not args.pile_v2_model:
     pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
     END_OF_TEXT = 0
     END_OF_LINE = 187
@@ -138,9 +171,10 @@ for i in AVOID_REPEAT:
     assert len(dd) == 1
     AVOID_REPEAT_TOKENS += dd
 
+
 ########################################################################################################
 
-def run_rnn(tokens, newline_adj = 0):
+def run_rnn(tokens, newline_adj=0):
     global model_tokens, model_state
 
     tokens = [int(x) for x in tokens]
@@ -148,16 +182,19 @@ def run_rnn(tokens, newline_adj = 0):
     # print(f'### model ###\n{tokens}\n[{pipeline.decode(model_tokens)}]')
 
     while len(tokens) > 0:
-        out, model_state = model.forward(tokens[:CHUNK_LEN], model_state)
-        tokens = tokens[CHUNK_LEN:]
+        out, model_state = model.forward(tokens[:args.chunk_len], model_state)
+        tokens = tokens[args.chunk_len:]
 
-    out[END_OF_LINE] += newline_adj # adjust \n probability
+    out[END_OF_LINE] += newline_adj  # adjust \n probability
 
     if model_tokens[-1] in AVOID_REPEAT_TOKENS:
         out[model_tokens[-1]] = -999999999
     return out
 
+
 all_state = {}
+
+
 def save_all_stat(srv, name, last_out):
     n = f'{name}_{srv}'
     all_state[n] = {}
@@ -165,12 +202,14 @@ def save_all_stat(srv, name, last_out):
     all_state[n]['rnn'] = copy.deepcopy(model_state)
     all_state[n]['token'] = copy.deepcopy(model_tokens)
 
+
 def load_all_stat(srv, name):
     global model_tokens, model_state
     n = f'{name}_{srv}'
     model_state = copy.deepcopy(all_state[n]['rnn'])
     model_tokens = copy.deepcopy(all_state[n]['token'])
     return all_state[n]['out']
+
 
 ########################################################################################################
 
@@ -186,25 +225,27 @@ srv_list = ['dummy_server']
 for s in srv_list:
     save_all_stat(s, 'chat', out)
 
+
 def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
+
 
 def on_message(message):
     global model_tokens, model_state
 
     srv = 'dummy_server'
 
-    msg = message.replace('\\n','\n').strip()
+    msg = message.replace('\\n', '\n').strip()
 
-    x_temp = GEN_TEMP
-    x_top_p = GEN_TOP_P
+    x_temp = args.gen_temp
+    x_top_p = args.gen_top_p
     if ("-temp=" in msg):
         x_temp = float(msg.split("-temp=")[1].split(" ")[0])
-        msg = msg.replace("-temp="+f'{x_temp:g}', "")
+        msg = msg.replace("-temp=" + f'{x_temp:g}', "")
         # print(f"temp: {x_temp}")
     if ("-top_p=" in msg):
         x_top_p = float(msg.split("-top_p=")[1].split(" ")[0])
-        msg = msg.replace("-top_p="+f'{x_top_p:g}', "")
+        msg = msg.replace("-top_p=" + f'{x_top_p:g}', "")
         # print(f"top_p: {x_top_p}")
     if x_temp <= 0.2:
         x_temp = 0.2
@@ -212,14 +253,15 @@ def on_message(message):
         x_temp = 5
     if x_top_p <= 0:
         x_top_p = 0
-    
+
     if msg == '+reset':
         out = load_all_stat('', 'chat_init')
         save_all_stat(srv, 'chat', out)
         reply_msg("Chat reset.")
         return
 
-    elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
+    elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[
+                                                                                                :4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
         if msg[:5].lower() == '+gen ':
             new = '\n' + msg[5:].strip()
@@ -230,14 +272,13 @@ def on_message(message):
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:3].lower() == '+i ':
-            new = f'''
-Below is an instruction that describes a task. Write a response that appropriately completes the request.
+            new = (
+                "Below is an instruction that describes a task."
+                "Write a response that appropriately completes the request.\n"
+                "The response should be a single sentence.\n\n"
+                f"# Instruction:\n{msg[3:].strip()}\n\n# Response:\n"
+            )
 
-# Instruction:
-{msg[3:].strip()}
-
-# Response:
-'''
             # print(f'### prompt ###\n[{new}]')
             model_state = None
             model_tokens = []
@@ -258,7 +299,7 @@ Below is an instruction that describes a task. Write a response that appropriate
             real_msg = msg[4:].strip()
             new = f"{user}{interface} {real_msg}\n\n{bot}{interface}"
             # print(f'### qa ###\n[{new}]')
-            
+
             out = run_rnn(pipeline.encode(new))
             save_all_stat(srv, 'gen_0', out)
 
@@ -278,9 +319,9 @@ Below is an instruction that describes a task. Write a response that appropriate
         begin = len(model_tokens)
         out_last = begin
         occurrence = {}
-        for i in range(FREE_GEN_LEN+100):
+        for i in range(args.free_gen_len + 100):
             for n in occurrence:
-                out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
+                out[n] -= (args.gen_alpha_presence + occurrence[n] * args.gen_alpha_frequency)
             token = pipeline.sample_logits(
                 out,
                 temperature=x_temp,
@@ -293,16 +334,16 @@ Below is an instruction that describes a task. Write a response that appropriate
             else:
                 occurrence[token] += 1
 
-            if msg[:4].lower() == '+qa ':# or msg[:4].lower() == '+qq ':
+            if msg[:4].lower() == '+qa ':  # or msg[:4].lower() == '+qq ':
                 out = run_rnn([token], newline_adj=-2)
             else:
                 out = run_rnn([token])
-            
+
             xxx = pipeline.decode(model_tokens[out_last:])
-            if '\ufffd' not in xxx: # avoid utf-8 display issues
+            if '\ufffd' not in xxx:  # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
-                if i >= FREE_GEN_LEN:
+                if i >= args.free_gen_len:
                     break
         print('\n')
         # send_msg = pipeline.decode(model_tokens[begin:]).strip()
@@ -330,15 +371,15 @@ Below is an instruction that describes a task. Write a response that appropriate
         for i in range(999):
             if i <= 0:
                 newline_adj = -999999999
-            elif i <= CHAT_LEN_SHORT:
-                newline_adj = (i - CHAT_LEN_SHORT) / 10
-            elif i <= CHAT_LEN_LONG:
+            elif i <= args.chat_len_short:
+                newline_adj = (i - args.chat_len_short) / 10
+            elif i <= args.chat_len_long:
                 newline_adj = 0
             else:
-                newline_adj = min(3, (i - CHAT_LEN_LONG) * 0.25) # MUST END THE GENERATION
+                newline_adj = min(3, (i - args.chat_len_long) * 0.25)  # MUST END THE GENERATION
 
             for n in occurrence:
-                out[n] -= (GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency)
+                out[n] -= (args.gen_alpha_presence + occurrence[n] * args.gen_alpha_frequency)
             token = pipeline.sample_logits(
                 out,
                 temperature=x_temp,
@@ -350,20 +391,20 @@ Below is an instruction that describes a task. Write a response that appropriate
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
-            
+
             out = run_rnn([token], newline_adj=newline_adj)
             out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
 
             xxx = pipeline.decode(model_tokens[out_last:])
-            if '\ufffd' not in xxx: # avoid utf-8 display issues
+            if '\ufffd' not in xxx:  # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
-            
+
             send_msg = pipeline.decode(model_tokens[begin:])
             if '\n\n' in send_msg:
                 send_msg = send_msg.strip()
                 break
-            
+
             # send_msg = pipeline.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
             #     send_msg = send_msg[:-len(f'{user}{interface}')].strip()
@@ -379,9 +420,10 @@ Below is an instruction that describes a task. Write a response that appropriate
         # reply_msg(send_msg)
         save_all_stat(srv, 'chat', out)
 
+
 ########################################################################################################
 
-if CHAT_LANG == 'English':
+if args.chat_lang == 'English':
     HELP_MSG = '''Commands:
 say something --> chat with bot. use \\n for new line.
 + --> alternate chat reply
@@ -394,7 +436,7 @@ say something --> chat with bot. use \\n for new line.
 
 Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B (especially https://huggingface.co/BlinkDL/rwkv-4-raven) for best results.
 '''
-elif CHAT_LANG == 'Chinese':
+elif args.chat_lang == 'Chinese':
     HELP_MSG = f'''指令:
 直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行，必须用 Raven 模型
 + --> 让机器人换个回答
@@ -414,9 +456,9 @@ elif CHAT_LANG == 'Chinese':
 +gen 这是一个修真世界，详细世界设定如下：\\n1.
 '''
 print(HELP_MSG)
-print(f'{CHAT_LANG} - {args.MODEL_NAME} - {args.strategy}')
+print(f'{args.chat_lang} - {args.model_name} - {args.strategy}')
 
-print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='')
+print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}', f'\n{bot}'), end='')
 
 ########################################################################################################
 
