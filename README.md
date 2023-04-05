@@ -45,6 +45,7 @@ print(out.detach().cpu().numpy())                   # same result as above
 ```
 ![RWKV-eval](RWKV-eval.png)
 
+Here is https://huggingface.co/BlinkDL/rwkv-4-raven/blob/main/RWKV-4-Raven-14B-v7-Eng-20230404-ctx4096.pth in action:
 ![ChatRWKV](ChatRWKV.png)
 
 Cool Community RWKV Projects:
