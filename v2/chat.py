@@ -105,7 +105,7 @@ if "cuda" in args.strategy and not torch.cuda.is_available():
 # Use '/' in model path, instead of '\'
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM
 if args.chat_lang == 'English' and args.model_name is None:
-    args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v6-Eng-20230401-ctx4096'  # try +i for "Alpaca instruct"
+    args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v6-Eng-20230404-ctx4096'  # try +i for "Alpaca instruct"
     # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-Eng-20230401-ctx4096' # try +i for "Alpaca instruct"
     # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
     # args.model_name = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
@@ -130,6 +130,7 @@ args.pile_v2_model = bool(args.pile_v2_model)  # False
 
 PROMPT_FILE = f'{current_path}/prompt/default/{args.chat_lang}-{args.prompt_version}.py'
 AVOID_REPEAT = '，：？！'
+
 
 ########################################################################################################
 
@@ -367,7 +368,7 @@ def on_message(message):
         out_last = begin
         print(f'{bot}{interface}', end='', flush=True)
         occurrence = {}
-        for i in range(args.chat_len_long * 3):
+        for i in range(999):
             if i <= 0:
                 newline_adj = -999999999
             elif i <= args.chat_len_short:
@@ -429,32 +430,27 @@ say something --> chat with bot. use \\n for new line.
 +reset --> reset chat
 
 +gen YOUR PROMPT --> free generation with any prompt. use \\n for new line.
-+qa YOUR QUESTION --> free generation - ask any question (just ask the question). use \\n for new line.
-+++ --> continue last free generation (only for +gen / +qa)
-++ --> retry last free generation (only for +gen / +qa)
++i YOUR INSTRUCT --> free generation with any instruct. use \\n for new line.
++++ --> continue last free generation (only for +gen / +i)
+++ --> retry last free generation (only for +gen / +i)
 
-Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B for best results.
-This is not instruct-tuned for conversation yet, so don't expect good quality. Better use +gen for free generation.
-
-Prompt is VERY important. Try all prompts on https://github.com/BlinkDL/ChatRWKV first.
+Now talk with the bot and enjoy. Remember to +reset periodically to clean up the bot's memory. Use RWKV-4 14B (especially https://huggingface.co/BlinkDL/rwkv-4-raven) for best results.
 '''
 elif args.chat_lang == 'Chinese':
     HELP_MSG = f'''指令:
-直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行
+直接输入内容 --> 和机器人聊天（建议问机器人问题），用\\n代表换行，必须用 Raven 模型
 + --> 让机器人换个回答
 +reset --> 重置对话，请经常使用 +reset 重置机器人记忆
-+qa 某某问题 --> 问独立的问题（忽略上下文），用\\n代表换行
-+qq 某某问题 --> 问独立的问题（忽略上下文），且敞开想象力，用\\n代表换行
 
-注意，中文网文【testNovel】模型，更适合下列指令：
-+gen 某某内容 --> 续写任何中英文内容，用\\n代表换行
-+++ --> 继续 +gen / +qa / +qq 的回答
-++ --> 换个 +gen / +qa / +qq 的回答
++i 某某指令 --> 问独立的问题（忽略上下文），用\\n代表换行，必须用 Raven 模型
++gen 某某内容 --> 续写任何中英文内容，用\\n代表换行，写中文小说必须用 testNovel 模型
++++ --> 继续 +gen / +i 的回答
+++ --> 换个 +gen / +i 的回答
 
 作者：彭博 请关注我的知乎: https://zhuanlan.zhihu.com/p/603840957
 如果喜欢，请看我们的优质护眼灯: https://withablink.taobao.com
 
-中文网文【testNovel】模型，请先试这些续写例子：
+中文网文 testNovel 模型，可以试这些续写例子（不适合 Raven 模型！）：
 +gen “区区
 +gen 以下是不朽的科幻史诗长篇巨著，描写细腻，刻画了数百位个性鲜明的英雄和宏大的星际文明战争。\\n第一章
 +gen 这是一个修真世界，详细世界设定如下：\\n1.
