@@ -204,7 +204,7 @@ class RWKV(MyModule):
 
             print_need_newline = False
             keys = list(w.keys())
-            for x in keys:
+            for i, x in enumerate(keys):
                 w[x].requires_grad = False
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
@@ -306,7 +306,7 @@ class RWKV(MyModule):
                     prxxx(x.ljust(32), dt.rjust(4), str(w[x].device).rjust(8), shape, ' (pinned)' if w[x].is_pinned() else '')
                 else:
                     print_need_newline = True
-                    prxxx('.', end = '', flush = True)
+                    prxxx(f'\r[{i}/{len(keys)-1}] {x.ljust(32)} ', end = '', flush = True)
             
             if convert_and_save_and_exit:
                 w['_strategy'] = args.strategy_string
