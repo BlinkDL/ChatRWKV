@@ -74,6 +74,15 @@ else:
 class RWKV(MyModule):
     def __init__(self, model, strategy, verbose = True, convert_and_save_and_exit = None):
         super().__init__()
+       
+        def __getstate__(self):
+            # Return the state of the object as a dictionary
+            return self.__dict__
+
+        def __setstate__(self, state):
+            # Set the state of the object from the dictionary
+            self.__dict__ = state
+
         if verbose:
             prxxx = lambda *args, **kwargs: print(*args, **kwargs)
         else:
