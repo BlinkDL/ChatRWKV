@@ -410,17 +410,35 @@ def on_message(message):
                 temperature=x_temp,
                 top_p=x_top_p,
             )
-            out = run_rnn([token], newline_adj=newline_adj)
+
+            tokens = tokenizer.encode('\n\n') if token == 0 else [token]
+            out = run_rnn(tokens, newline_adj=newline_adj)
 
             xxx = tokenizer.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
                 print(xxx, end='', flush=True)
                 out_last = begin + i + 1
             
-            send_msg = tokenizer.decode(model_tokens[begin:])
+            send_msg: str = tokenizer.decode(model_tokens[begin:])
             if '\n\n' in send_msg:
                 send_msg = send_msg.strip()
                 break
+
+            idx = send_msg.find(f'{user}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = tokenizer.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
+
+            idx = send_msg.find(f'{bot}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = tokenizer.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
             
             # send_msg = tokenizer.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
