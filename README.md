@@ -7,7 +7,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
-Update ChatRWKV v2 & pip rwkv package (0.7.0):
+Update ChatRWKV v2 & pip rwkv package (0.7.3):
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 ```
@@ -20,6 +20,8 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
+
+![ChatRWKV-strategy](ChatRWKV-strategy.png)
 
 ## RWKV Discord: https://discord.gg/bDSBUMeFpc (let's build together)
 
@@ -45,6 +47,7 @@ print(out.detach().cpu().numpy())                   # same result as above
 ```
 ![RWKV-eval](RWKV-eval.png)
 
+Here is https://huggingface.co/BlinkDL/rwkv-4-raven/blob/main/RWKV-4-Raven-14B-v7-Eng-20230404-ctx4096.pth in action:
 ![ChatRWKV](ChatRWKV.png)
 
 Cool Community RWKV Projects:
