@@ -56,9 +56,7 @@ https://pypi.org/project/rwkvstic/ pip package (with 8bit & offload for low VRAM
 
 **https://github.com/saharNooby/rwkv.cpp rwkv.cpp for fast CPU reference**
 
-https://github.com/gururise/rwkv_gradio RWKV Gradio
-
-https://github.com/hizkifw/WebChatRWKVstic WebUI (WIP)
+https://github.com/wfox4/WebChatRWKVv2 WebUI
 
 https://github.com/cryscan/eloise RWKV QQ bot
 
