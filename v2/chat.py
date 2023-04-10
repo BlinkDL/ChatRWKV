@@ -72,6 +72,12 @@ elif CHAT_LANG == 'Chinese': # testNovel系列是小说模型，请只用 +gen �
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-EngChn-testNovel-done-ctx2048-20230226'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-EngChn-testNovel-done-ctx2048-20230225'
     # args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-run1z/rwkv-663'
+elif CHAT_LANG == 'Japanese':
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v8-EngAndMore-20230408-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v8-EngAndMore-20230408-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v8-EngAndMore-20230408-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v6-EngChnJpn-20230401-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v6-EngChnJpn-20230401-ctx4096'
 
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
@@ -413,6 +419,20 @@ elif CHAT_LANG == 'Chinese':
 +gen 以下是不朽的科幻史诗长篇巨著，描写细腻，刻画了数百位个性鲜明的英雄和宏大的星际文明战争。\\n第一章
 +gen 这是一个修真世界，详细世界设定如下：\\n1.
 '''
+elif CHAT_LANG == 'Japanese':
+    HELP_MSG = f'''コマンド:
+直接入力 --> ボットとチャットする．改行には\\nを使用してください．
++ --> ボットに前回のチャットの内容を変更させる．
++reset --> 対話のリセット．メモリをリセットするために，+resetを定期的に実行してください．
+
++i インストラクトの入力 --> チャットの文脈を無視して独立した質問を行う．改行には\\nを使用してください．
++gen プロンプトの生成 --> チャットの文脈を無視して入力したプロンプトに続く文章を出力する．改行には\\nを使用してください．
++++ --> +gen / +i の出力の回答を続ける．
+++ --> +gen / +i の出力の再生成を行う.
+
+ボットとの会話を楽しんでください。また、定期的に+resetして、ボットのメモリをリセットすることを忘れないようにしてください。
+'''
+
 print(HELP_MSG)
 print(f'{CHAT_LANG} - {args.MODEL_NAME} - {args.strategy}')
 
