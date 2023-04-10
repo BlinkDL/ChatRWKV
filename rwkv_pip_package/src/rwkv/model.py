@@ -72,7 +72,7 @@ else:
 ########################################################################################################
 
 class RWKV(MyModule):
-    def __init__(self, model, strategy, verbose = True, convert_and_save_and_exit = None):
+    def __init__(self, model, strategy, lora, verbose = True, convert_and_save_and_exit = None):
         super().__init__()
         if verbose:
             prxxx = lambda *args, **kwargs: print(*args, **kwargs)
@@ -101,6 +101,33 @@ class RWKV(MyModule):
             self.w = torch.load(args.MODEL_NAME, map_location='cpu') # load model to CPU first
             gc.collect()
             w = self.w
+
+            if lora.lora_r > 0:
+                prxxx(f'Loading lora ...')
+                # merge LoRA-only slim checkpoint into the main weights
+                w_lora = torch.load(lora.MODEL_LORA + '.pth', map_location='cpu')
+                for k in w_lora.keys():
+                    w[k] = w_lora[k]
+                # merge LoRA weights
+                keys = set(w.keys())
+                for k in keys:
+                    k: str
+                    if k.endswith('.weight'):
+                        prefix = k[:-len('.weight')]
+                        lora_A = prefix + '.lora_A'
+                        lora_B = prefix + '.lora_B'
+                        if lora_A in keys:
+                            assert lora_B in keys
+                            print(f'merging {lora_A} and {lora_B} into {k}')
+                            assert w[lora_B].shape[1] == w[lora_A].shape[0] == lora.lora_r
+                            # merging needs matmul, which is slow on cpu; work on gpu if possible
+                            if lora.RUN_DEVICE == 'cuda':
+                                w[k] = w[k].cuda()
+                                w[lora_A] = w[lora_A].cuda()
+                                w[lora_B] = w[lora_B].cuda()
+                            w[k] += w[lora_B] @ w[lora_A] * (lora.lora_alpha / lora.lora_r)
+                            del w[lora_A]
+                            del w[lora_B]
 
             ALREADY_CONVERTED = False
             if '_strategy' in w:

@@ -49,6 +49,14 @@ args.strategy = 'cuda fp16'
 # args.strategy = 'cuda fp16i8 -> cpu fp32 *10'
 # args.strategy = 'cuda fp16i8 *10+'
 
+
+lora = types.SimpleNamespace()
+lora.MODEL_LORA = './cp/rwkv-10'
+lora.lora_r = 0 #r = 0 for no LORA
+lora.lora_alpha = 8
+lora.RUN_DEVICE = "cuda"
+
+
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0', please use torch 1.13+ and benchmark speed
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
 
@@ -119,7 +127,7 @@ init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
 # Load Model
 
 print(f'Loading model - {args.MODEL_NAME}')
-model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
+model = RWKV(model=args.MODEL_NAME, strategy=args.strategy, lora=lora)
 if not PILE_v2_MODEL:
     pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
     END_OF_TEXT = 0
