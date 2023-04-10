@@ -111,16 +111,16 @@ print(f'\n{CHAT_LANG} - {args.strategy} - {PROMPT_FILE}')
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
 
-with open(PROMPT_FILE, 'rb') as file:
-    user = None
-    bot = None
-    interface = None
-    init_prompt = None
-    exec(compile(file.read(), PROMPT_FILE, 'exec'))
-init_prompt = init_prompt.strip().split('\n')
-for c in range(len(init_prompt)):
-    init_prompt[c] = init_prompt[c].strip().strip('\u3000').strip('\r')
-init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
+def load_prompt(PROMPT_FILE):
+    variables = {}
+    with open(PROMPT_FILE, 'rb') as file:
+        exec(compile(file.read(), PROMPT_FILE, 'exec'), variables)
+    user, bot, interface, init_prompt = variables['user'], variables['bot'], variables['interface'], variables['init_prompt']
+    init_prompt = init_prompt.strip().split('\n')
+    for c in range(len(init_prompt)):
+        init_prompt[c] = init_prompt[c].strip().strip('\u3000').strip('\r')
+    init_prompt = '\n' + ('\n'.join(init_prompt)).strip() + '\n\n'
+    return user, bot, interface, init_prompt
 
 # Load Model
 
@@ -183,6 +183,7 @@ def load_all_stat(srv, name):
 # Run inference
 print(f'\nRun prompt...')
 
+user, bot, interface, init_prompt = load_prompt(PROMPT_FILE)
 out = run_rnn(pipeline.encode(init_prompt))
 save_all_stat('', 'chat_init', out)
 gc.collect()
@@ -196,7 +197,7 @@ def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
 
 def on_message(message):
-    global model_tokens, model_state
+    global model_tokens, model_state, user, bot, interface, init_prompt
 
     srv = 'dummy_server'
 
@@ -224,6 +225,20 @@ def on_message(message):
         save_all_stat(srv, 'chat', out)
         reply_msg("Chat reset.")
         return
+    
+    # use '+prompt {path}' to load a new prompt
+    elif msg[:8].lower() == '+prompt ':
+        print("Loading prompt...")
+        try:
+            PROMPT_FILE = msg[8:].strip()
+            user, bot, interface, init_prompt = load_prompt(PROMPT_FILE)
+            out = run_rnn(pipeline.encode(init_prompt))
+            save_all_stat(srv, 'chat', out)
+            print("Prompt set up.")
+            gc.collect()
+            torch.cuda.empty_cache()
+        except:
+            print("Path error.")
 
     elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
