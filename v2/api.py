@@ -143,7 +143,7 @@ def predict(model_state, model_tokens, prompt):
     model_state, model_tokens, out = run_rnn(
         model_state,
         model_tokens,
-        pipeline.encode(f"{prompt}\n\nAssistant: "),
+        pipeline.encode(f"{prompt}\n\nAlice:"),
         newline_adj=-999999999,
     )
 
@@ -211,7 +211,7 @@ async def chat_completions(req: Request):
 
     json_data = await req.json()
 
-    init_prompt = load_prompt("User", "Assistant")
+    init_prompt = load_prompt("Bob", "Alice")
 
     model_state, model_tokens, message = predict(
         model_state, model_tokens, init_prompt
@@ -219,7 +219,7 @@ async def chat_completions(req: Request):
 
     prompt = ""
     for message in json_data["messages"]:
-        role = message["role"].capitalize()
+        role = "Bob" if message["role"] == "user" else "Alice"
         content = message["content"]
         prompt += f"{role}: {content}\n\n"
 
