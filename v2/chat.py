@@ -372,6 +372,22 @@ Below is an instruction that describes a task. Write a response that appropriate
                 send_msg = send_msg.strip()
                 break
             
+            idx = send_msg.find(f'{user}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = pipeline.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
+
+            idx = send_msg.find(f'{bot}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = pipeline.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
+            
             # send_msg = pipeline.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
             #     send_msg = send_msg[:-len(f'{user}{interface}')].strip()
