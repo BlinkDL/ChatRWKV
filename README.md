@@ -56,9 +56,9 @@ When you build a RWKV chatbot, always check the text corresponding to the state,
 
 2. The best chat format (check whether your text is of this format):
 ```Bob: xxxxxxxxxxxxxxxxxx\n\nAlice: xxxxxxxxxxxxx\n\nBob: xxxxxxxxxxxxxxxx\n\nAlice:```
-*) There should not be any space after the final "Alice:". The generation result will have a space in the beginning, and you can simply strip it.
 
-*) You can use \n in xxxxx, but avoid \n\n. So simply do ```xxxxx = xxxxx.strip().replace('\r\n','\n').replace('\n\n','\n')```
+* There should not be any space after the final "Alice:". The generation result will have a space in the beginning, and you can simply strip it.
+* You can use \n in xxxxx, but avoid \n\n. So simply do ```xxxxx = xxxxx.strip().replace('\r\n','\n').replace('\n\n','\n')```
 
 Cool Community RWKV Projects:
 
