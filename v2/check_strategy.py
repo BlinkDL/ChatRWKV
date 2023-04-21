@@ -96,6 +96,17 @@ def ReadMemoryInfo():
         import psutil
         print("psutil is already installed")
 
+    if not is_installed("pynvml"):
+        try:
+            run_pip(f"install pynvml", "pynvml")
+            import pynvml
+        except ModuleNotFoundError:
+            print("install pynvml failed")
+            return 0, device_list
+    else:
+        import pynvml
+        print("pynvml is already installed")
+
     # 获取系统内存信息
     mem = psutil.virtual_memory()
     # 获取可用内存大小（单位为字节）
@@ -104,7 +115,6 @@ def ReadMemoryInfo():
     available_mem_gb = available_mem / 1024 / 1024 / 1024
     print("系统剩余内存大小为：{:.2f} GB".format(available_mem_gb))
 
-    import pynvml
     # 初始化 pynvml 库
     pynvml.nvmlInit()
     # 获取 GPU 设备数量
