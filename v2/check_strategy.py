@@ -1,6 +1,7 @@
 import gc
 import importlib
 import io
+import locale
 import pickle
 import random
 import subprocess
@@ -48,7 +49,8 @@ stderr: {result.stderr.decode(encoding="utf8", errors="ignore") if len(result.st
 
 def run_pip(args, desc=None):
     lan = os.getenv('LANG')
-    if 'zh_CN' in lan:
+    language_code, encoding = locale.getdefaultlocale()
+    if language_code.startswith('zh'):
         index_url = random.choice(pip_mirror)
     else:
         index_url=None
@@ -128,8 +130,8 @@ def CheckStrategy(model_path):
     filesize = os.path.getsize(model_path)
     filesize_gb = filesize / 1024 / 1024 / 1024
     if filesize_gb > memory:
-        lan = os.getenv('LANG')
-        if 'zh_CN' in lan:
+        language_code, encoding = locale.getdefaultlocale()
+        if language_code.startswith('zh'):
             print("模型无法加载，系统可用内存{:.2f} GB小于模型大小{:.2f} GB，请增加虚拟内存".format(memory, filesize_gb))
         else:
             print("cannot load model, Available memory{:.2f} GB is less than file size{:.2f} GB, increase visual memory".format(memory, filesize_gb))
@@ -207,8 +209,8 @@ if __name__ == "__main__":
     # strategy = CheckStrategy('F:/RWKVModel/fp16i8_RWKV-4b-Pile-171M-20230202-7922.pth')
     strategy = CheckStrategy('D:/AI/RWKV-4b-Pile-171M-20230202-7922.pth')
     if strategy != '':
-        lan = os.getenv('LANG')
-        if 'zh_CN' in lan:
+        language_code, encoding = locale.getdefaultlocale()
+        if language_code.startswith('zh'):
             print(f"你的策略: {strategy}")
         else:
             print(f"your strategy is: {strategy}")
