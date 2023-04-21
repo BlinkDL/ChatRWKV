@@ -50,6 +50,16 @@ print(out.detach().cpu().numpy())                   # same result as above
 Here is https://huggingface.co/BlinkDL/rwkv-4-raven/blob/main/RWKV-4-Raven-14B-v7-Eng-20230404-ctx4096.pth in action:
 ![ChatRWKV](ChatRWKV.png)
 
+When you build a RWKV chatbot, always check the text corresponding to the state, in order to prevent bugs.
+
+1. Never call raw forward() directly. Instead, put it in a function that will record the text corresponding to the state.
+
+2. The best chat format (check whether your text is of this format):
+```Bob: xxxxxxxxxxxxxxxxxx\n\nAlice: xxxxxxxxxxxxx\n\nBob: xxxxxxxxxxxxxxxx\n\nAlice:```
+
+* There should not be any space after the final "Alice:". The generation result will have a space in the beginning, and you can simply strip it.
+* You can use \n in xxxxx, but avoid \n\n. So simply do ```xxxxx = xxxxx.strip().replace('\r\n','\n').replace('\n\n','\n')```
+
 Cool Community RWKV Projects:
 
 https://pypi.org/project/rwkvstic/ pip package (with 8bit & offload for low VRAM GPUs)
@@ -75,7 +85,9 @@ Previous old model results:
 
 QQ群 553456870（加入时请简单自我介绍）。有研发能力的朋友加群 325154699。
 
-中文使用教程：https://zhuanlan.zhihu.com/p/618011122
+中文使用教程：https://zhuanlan.zhihu.com/p/618011122 https://zhuanlan.zhihu.com/p/616351661
+
+推荐UI：https://github.com/l15y/wenda
 
 ## Star History
 

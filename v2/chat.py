@@ -59,11 +59,11 @@ CHAT_LANG = 'English' # English // Chinese // more to come
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
     args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v9-Eng99%-Other1%-20230412-ctx8192'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9-Eng99%-Other1%-20230412-ctx8192'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v10-Eng99%-Other1%-20230418-ctx8192'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
 
 elif CHAT_LANG == 'Chinese': # Raven系列可以对话和 +i 问答。Novel系列是小说模型，请只用 +gen 指令续写。
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9-Eng49%-Chn50%-Other1%-20230414-ctx4096'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9x-Eng49%-Chn50%-Other1%-20230418-ctx4096'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-novel/RWKV-4-Novel-7B-v1-ChnEng-20230409-ctx4096'
 
 elif CHAT_LANG == 'Japanese':
@@ -89,9 +89,9 @@ AVOID_REPEAT = '，：？！'
 CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
 
 # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9-Eng86%-Chn10%-JpnEspKor2%-Other2%-20230414-ctx4096'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-100'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ZH/rwkv-final'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/v2/3-run1/rwkv-613'
+# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v9x-Eng49%-Chn50%-Other1%-20230417-ctx4096'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-88'
+# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-JP/rwkv-5'
 
 ########################################################################################################
 
@@ -238,11 +238,12 @@ def on_message(message):
             save_all_stat(srv, 'gen_0', out)
 
         elif msg[:3].lower() == '+i ':
+            msg = msg[3:].strip().replace('\r\n','\n').replace('\n\n','\n')
             new = f'''
 Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
 # Instruction:
-{msg[3:].strip()}
+{msg}
 
 # Response:
 '''
@@ -326,6 +327,7 @@ Below is an instruction that describes a task. Write a response that appropriate
                 return
         else:
             out = load_all_stat(srv, 'chat')
+            msg = msg.strip().replace('\r\n','\n').replace('\n\n','\n')
             new = f"{user}{interface} {msg}\n\n{bot}{interface}"
             # print(f'### add ###\n[{new}]')
             out = run_rnn(pipeline.encode(new), newline_adj=-999999999)
