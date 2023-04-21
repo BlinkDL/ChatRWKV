@@ -85,7 +85,9 @@ Previous old model results:
 
 QQ群 553456870（加入时请简单自我介绍）。有研发能力的朋友加群 325154699。
 
-中文使用教程：https://zhuanlan.zhihu.com/p/618011122
+中文使用教程：https://zhuanlan.zhihu.com/p/618011122 https://zhuanlan.zhihu.com/p/616351661
+
+推荐UI：https://github.com/l15y/wenda
 
 ## Star History
 
