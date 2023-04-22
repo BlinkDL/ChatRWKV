@@ -245,8 +245,7 @@ if __name__ == "__main__":
         else:
             print(f"read memoryinfo failed, check error")
         exit()
-    # strategy = CheckStrategy('D:/AI/RWKV-4b-Pile-171M-20230202-7922.pth')
-    strategy = CheckStrategy(memory, device_list, 'D:/AI/NLPai/RWKV-4-Raven-7B-v10-Eng49%-Chn50%-Other1%-20230420-ctx4096.pth')
+    strategy = CheckStrategy(memory, device_list, 'D:/AI/RWKV-4b-Pile-171M-20230202-7922.pth')
     if strategy != '':
         if CheckChinese():
             print(f"你的策略: {strategy}")
