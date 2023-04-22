@@ -3,6 +3,7 @@ import importlib
 import io
 import locale
 import pickle
+import platform
 import random
 import subprocess
 import sys,os
@@ -19,6 +20,12 @@ pip_mirror = [
               "https://pypi.mirrors.ustc.edu.cn/simple/",
               "http://pypi.douban.com/simple/"
               ]
+def CheckChinese():
+    language_code, encoding = locale.getdefaultlocale()
+    if language_code.startswith('zh'):
+        return True
+    else:
+        return False
 
 def run(command, desc=None, errdesc=None, custom_env=None, live=False):
     if desc is not None:
@@ -48,20 +55,18 @@ stderr: {result.stderr.decode(encoding="utf8", errors="ignore") if len(result.st
     return result.stdout.decode(encoding="utf8", errors="ignore")
 
 def run_pip(args, desc=None):
-    lan = os.getenv('LANG')
-    language_code, encoding = locale.getdefaultlocale()
-    if language_code.startswith('zh'):
+    index_url=''
+    if CheckChinese():
         index_url = random.choice(pip_mirror)
-    else:
-        index_url=None
-    if 'https' in index_url:
-        trust = None
-    else:
-        host_url = index_url.removeprefix("http://")
-        host_url = host_url.split('/')[0]
-        trust = '--trusted-host ' + host_url
-    index_url_line = f' --index-url {index_url}' if index_url != '' else ''
-    print(run(f'"{python}" -m pip {args} --prefer-binary{index_url_line} {trust}', desc=f"Installing {desc}", errdesc=f"Couldn't install {desc}"))
+
+    trusted_host_url = ''
+    if index_url != '':
+        if 'https' not in index_url:
+            trusted_host_url = index_url.replace("http://", '')
+            trusted_host_url = '--trusted-host ' + trusted_host_url.split('/')[0]
+
+    index_url_line = f' --index-url {index_url} {trusted_host_url}' if index_url != '' else ''
+    print(run(f'"{python}" -m pip {args} --prefer-binary{index_url_line}', desc=f"Installing {desc}", errdesc=f"Couldn't install {desc}"))
 
 def is_installed(package):
     try:
@@ -85,12 +90,21 @@ def ReadModelStrategy(model_path):
 
 def ReadMemoryInfo():
     device_list = {}
+
+    if not platform.platform().startswith('Windows'):
+        if not is_installed("psutil") or not is_installed("pynvml"):
+            if CheckChinese():
+                print(f"请手动执行命令：pip install psutil pynvml")
+            else:
+                print(f"plz pip install psutil pynvml as root, manually")
+            return 0, device_list
+
     if not is_installed("psutil"):
         try:
             run_pip(f"install psutil", "psutil")
             import psutil
-        except ModuleNotFoundError:
-            print("install psutil failed")
+        except RuntimeError as e:
+            print("install psutil failed, info: ", e)
             return 0, device_list
     else:
         import psutil
@@ -100,8 +114,8 @@ def ReadMemoryInfo():
         try:
             run_pip(f"install pynvml", "pynvml")
             import pynvml
-        except ModuleNotFoundError:
-            print("install pynvml failed")
+        except RuntimeError as e:
+            print("install pynvml failed, info: ", e)
             return 0, device_list
     else:
         import pynvml
@@ -135,22 +149,30 @@ def ReadMemoryInfo():
     # print("可用显存大小为：{:.2f} GB".format(torch.cuda.get_device_properties(device).total_memory / 1024 / 1024 / 1024))
     return available_mem_gb, device_list
 
-def CheckStrategy(model_path):
-    memory, device_list = ReadMemoryInfo()
-    filesize = os.path.getsize(model_path)
-    filesize_gb = filesize / 1024 / 1024 / 1024
-    if filesize_gb > memory:
-        language_code, encoding = locale.getdefaultlocale()
-        if language_code.startswith('zh'):
-            print("模型无法加载，系统可用内存{:.2f} GB小于模型大小{:.2f} GB，请增加虚拟内存".format(memory, filesize_gb))
-        else:
-            print("cannot load model, Available memory{:.2f} GB is less than file size{:.2f} GB, increase visual memory".format(memory, filesize_gb))
-        return ''
-
+def CheckStrategy(memory, device_list, model_path):
     try:
+        filesize = os.path.getsize(model_path)
+        filesize_gb = filesize / 1024 / 1024 / 1024
+        if filesize_gb > memory:
+            if CheckChinese():
+                print("模型无法加载，系统可用内存{:.2f} GB小于模型大小{:.2f} GB，请增加虚拟内存".format(memory, filesize_gb))
+            else:
+                print("cannot load model, Available memory{:.2f} GB is less than file size{:.2f} GB, increase visual memory".format(memory, filesize_gb))
+            return ''
         strategy, version = ReadModelStrategy(model_path)
     except ModuleNotFoundError:
         print("load model failed")
+    except FileNotFoundError:
+        if CheckChinese():
+            print(f"加载模型失败, 路径错误: {model_path}")
+        else:
+            print(f"load model failed, path is wrong: {model_path}")
+        return ''
+    except:
+        if CheckChinese():
+            print("加载模型失败，内存不够，请增加虚拟内存")
+        else:
+            print("load model failed, out of memeory, plz add your virtual memory")
         return ''
 
     gc.collect()
@@ -216,11 +238,17 @@ def CheckStrategy(model_path):
         return out_strategy
 
 if __name__ == "__main__":
-    # strategy = CheckStrategy('F:/RWKVModel/fp16i8_RWKV-4b-Pile-171M-20230202-7922.pth')
-    strategy = CheckStrategy('D:/AI/RWKV-4b-Pile-171M-20230202-7922.pth')
+    memory, device_list = ReadMemoryInfo()
+    if memory == 0:
+        if CheckChinese():
+            print(f"读取系统内存失败，请查看错误")
+        else:
+            print(f"read memoryinfo failed, check error")
+        exit()
+    # strategy = CheckStrategy('D:/AI/RWKV-4b-Pile-171M-20230202-7922.pth')
+    strategy = CheckStrategy(memory, device_list, 'D:/AI/NLPai/RWKV-4-Raven-7B-v10-Eng49%-Chn50%-Other1%-20230420-ctx4096.pth')
     if strategy != '':
-        language_code, encoding = locale.getdefaultlocale()
-        if language_code.startswith('zh'):
+        if CheckChinese():
             print(f"你的策略: {strategy}")
         else:
             print(f"your strategy is: {strategy}")
