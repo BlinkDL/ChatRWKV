@@ -25,6 +25,10 @@ Benefits:
 
 * The tokenization result is surprisingly good, because the vocab respects word boundaries and UTF-8 boundaries.
 
+For 10x faster speed:
+mypyc rwkv_tokenizer.py
+python3 -c "import rwkv_tokenizer"
+
 #######################################################################################################################
 ''')
 
@@ -114,6 +118,8 @@ class RWKV_TOKENIZER():
 
 class TRIE:
     __slots__ = tuple("ch,to,values,front".split(","))
+    to:list
+    values:set
     def __init__(self, front=None, ch=None):
         self.ch = ch
         self.to = [None for ch in range(256)]
@@ -129,7 +135,7 @@ class TRIE:
             fr = fr.front
         return "<TRIE %s %s>"%(ret[::-1], self.values)
     
-    def add(self, key, idx=0, val=None):
+    def add(self, key:bytes, idx:int=0, val=None):
         if(idx == len(key)):
             if(val is None):
                 val = key
@@ -140,9 +146,9 @@ class TRIE:
             self.to[ch] = TRIE(front=self, ch=ch)
         return self.to[ch].add(key, idx=idx+1, val=val)
     
-    def find_longest(self, key, idx=0):
-        u = self
-        ch = key[idx]
+    def find_longest(self, key:bytes, idx:int=0):
+        u:TRIE = self
+        ch:int = key[idx]
         
         while(u.to[ch] is not None):
             u = u.to[ch]
@@ -175,16 +181,16 @@ class TRIE_TOKENIZER():
 
         self.root = TRIE()
         for t, i in self.token2idx.items():
-            node = self.root.add(t, val=(t, i))
+            _ = self.root.add(t, val=(t, i))
 
-    def encodeBytes(self, src):
-        idx = 0
-        tokens = []
-        while(idx<len(src)):
-            _idx = idx
-            idx, node, values = self.root.find_longest(src, idx)
+    def encodeBytes(self, src:bytes) -> list[int]:
+        idx:int = 0
+        tokens:list[int] = []
+        while (idx < len(src)):
+            _idx:int = idx
+            idx, _, values = self.root.find_longest(src, idx)
             assert(idx != _idx)
-            ch, token = next(iter(values))            
+            _, token = next(iter(values))            
             tokens.append(token)
         return tokens
 
@@ -291,7 +297,7 @@ for TRIAL in range(99999):
     x = chr(random.randrange(256, 1114112))
     x = x * random.randrange(1, 4)
     try:
-        xx = x.encode("utf-8")
+        tmp = x.encode("utf-8")
         QQQ += [x]
     except:
         pass
