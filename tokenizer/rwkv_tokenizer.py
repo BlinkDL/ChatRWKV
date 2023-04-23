@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, sys
+import os, sys, time
 
 print('''
 #######################################################################################################################
@@ -29,8 +29,11 @@ Benefits:
 ''')
 
 class RWKV_TOKENIZER():
+    table: list[list[list[bytes]]]
+    good: list[set[int]]
+    wlen: list[int]
     def __init__(self, file_name):
-        self.I_TO_TOKEN = {}
+        self.idx2token = {}
         sorted = [] # must be already sorted
         lines = open(file_name, "r", encoding="utf-8").readlines()
         for l in lines:
@@ -40,14 +43,13 @@ class RWKV_TOKENIZER():
             assert isinstance(x, bytes)
             assert len(x) == int(l[l.rindex(' '):])
             sorted += [x]
-            self.I_TO_TOKEN[idx] = x
+            self.idx2token[idx] = x
 
-        self.TOKEN_TO_I = {}
-        for k,v in self.I_TO_TOKEN.items():
-            self.TOKEN_TO_I[v] = int(k)
+        self.token2idx = {}
+        for k, v in self.idx2token.items():
+            self.token2idx[v] = int(k)
 
         # precompute some tables for fast matching
-
         self.table = [[[] for j in range(256)] for i in range(256)]
         self.good = [set() for i in range(256)]
         self.wlen = [0 for i in range(256)]
@@ -61,30 +63,31 @@ class RWKV_TOKENIZER():
                 self.wlen[s0] = max(self.wlen[s0], len(s))
                 self.good[s0].add(s1)
 
-    def encodeBytes(self, src):
-        src_len = len(src)
-        tokens = []
-        i = 0
+    def encodeBytes(self, src: bytes) -> list[int]:
+        src_len: int = len(src)
+        tokens: list[int] = []
+        i: int = 0
         while i < src_len:
-            s = src[i : i + 1]
+            s: bytes = src[i : i + 1]
 
             if i < src_len - 1:
-                s1 = int(src[i + 1])
-                s0 = int(s[0])
-
+                s1: int = int(src[i + 1])
+                s0: int = int(src[i])
                 if s1 in self.good[s0]:
-                    sss = src[i : i + self.wlen[s0]]
-                    s = next(filter(sss.startswith, self.table[s0][s1]))
-
-            tokens.append(self.TOKEN_TO_I[s])
+                    sss: bytes = src[i : i + self.wlen[s0]]
+                    try:
+                        s = next(filter(sss.startswith, self.table[s0][s1]))
+                    except:
+                        pass
+            tokens.append(self.token2idx[s])
             i += len(s)
 
         return tokens
 
     def decodeBytes(self, tokens):
-        return b''.join(map(lambda i: self.I_TO_TOKEN[i], tokens))
+        return b''.join(map(lambda i: self.idx2token[i], tokens))
 
-    def encode(self, src):
+    def encode(self, src: str):
         return self.encodeBytes(src.encode("utf-8"))
 
     def decode(self, tokens):
@@ -92,7 +95,7 @@ class RWKV_TOKENIZER():
 
     def printTokens(self, tokens):
         for i in tokens:
-            s = self.I_TO_TOKEN[i]
+            s = self.idx2token[i]
             try:
                 s = s.decode('utf-8')
             except:
@@ -101,7 +104,7 @@ class RWKV_TOKENIZER():
             # print(repr(s), i)
         print()
 
-TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230422.txt')
+TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230423.txt')
 
 src = '''起業家イーロン・マスク氏が創業した宇宙開発企業「スペースX（エックス）」の巨大新型ロケット「スターシップ」が20日朝、初めて打ち上げられたが、爆発した。
 打ち上げは米テキサス州の東海岸で行われた。無人の試験で、負傷者はいなかった。
@@ -120,3 +123,22 @@ assert TOKENIZER.decode(tokens) == src
 print()
 TOKENIZER.printTokens(tokens)
 print(f'\n{len(tokens)} tokens\n')
+
+### Benchmark
+src = src * 100
+src_len = len(src)
+print(f'Benchmark {src_len} tokens...')
+
+min_t = 1e100
+for i in range(5):
+    t_begin = time.time_ns()
+    tokens = TOKENIZER.encode(src)
+    min_t = min(time.time_ns() - t_begin, min_t)
+print('Encode', round(src_len / min_t * 1e3, 3), 'MB/s')
+
+min_t = 1e100
+for i in range(10):
+    t_begin = time.time_ns()
+    sss = TOKENIZER.decode(tokens)
+    min_t = min(time.time_ns() - t_begin, min_t)
+print('Decode', round(src_len / min_t * 1e3, 3), 'MB/s')
