@@ -62,31 +62,27 @@ class RWKV_TOKENIZER():
                 self.good[s0].add(s1)
 
     def encodeBytes(self, src):
+        src_len = len(src)
         tokens = []
         i = 0
-        while True:
-            s = src[i:i+1]
-            if i < len(src) - 1:
-                s0 = int(src[i])
-                s1 = int(src[i+1])
+        while i < src_len:
+            s = src[i : i + 1]
+
+            if i < src_len - 1:
+                s1 = int(src[i + 1])
+                s0 = int(s[0])
+
                 if s1 in self.good[s0]:
-                    sss = src[i:i+self.wlen[s0]]
-                    for x in self.table[s0][s1]:
-                        if sss.startswith(x):
-                            s = x
-                            break
-            tokens += [self.TOKEN_TO_I[s]]
+                    sss = src[i : i + self.wlen[s0]]
+                    s = next(filter(sss.startswith, self.table[s0][s1]))
+
+            tokens.append(self.TOKEN_TO_I[s])
             i += len(s)
-            assert i <= len(src)
-            if i == len(src):
-                break
+
         return tokens
 
     def decodeBytes(self, tokens):
-        s = b''
-        for i in tokens:
-            s += self.I_TO_TOKEN[i]
-        return s
+        return b''.join(map(lambda i: self.I_TO_TOKEN[i], tokens))
 
     def encode(self, src):
         return self.encodeBytes(src.encode("utf-8"))
