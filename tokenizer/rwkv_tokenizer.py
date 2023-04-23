@@ -28,71 +28,64 @@ Benefits:
 #######################################################################################################################
 ''')
 
-### Warning: Messy Code ###
 class RWKV_TOKENIZER():
     def __init__(self, file_name):
         self.I_TO_TOKEN = {}
-        sorted = []
-        ff = open(file_name, "r", encoding="utf-8").readlines()
-        for l in ff:
-            id = int(l[:l.index(' ')])
+        sorted = [] # must be already sorted
+        lines = open(file_name, "r", encoding="utf-8").readlines()
+        for l in lines:
+            idx = int(l[:l.index(' ')])
             x = eval(l[l.index(' '):l.rindex(' ')])
             x = x.encode("utf-8") if isinstance(x, str) else x
             assert isinstance(x, bytes)
             assert len(x) == int(l[l.rindex(' '):])
             sorted += [x]
-            self.I_TO_TOKEN[id] = x
+            self.I_TO_TOKEN[idx] = x
 
         self.TOKEN_TO_I = {}
         for k,v in self.I_TO_TOKEN.items():
             self.TOKEN_TO_I[v] = int(k)
 
-        # precompute some table for fast match
+        # precompute some tables for fast matching
 
         self.table = [[[] for j in range(256)] for i in range(256)]
-        self.good = [[] for i in range(256)]
+        self.good = [set() for i in range(256)]
         self.wlen = [0 for i in range(256)]
 
-        for i in reversed(range(len(sorted))): # NOTE: reverse order - match longer tokens first
+        for i in reversed(range(len(sorted))): # reverse order - match longer tokens first
             s = sorted[i]
             if len(s) >= 2:
                 s0 = int(s[0])
                 s1 = int(s[1])
                 self.table[s0][s1] += [s]
                 self.wlen[s0] = max(self.wlen[s0], len(s))
-                if s1 not in self.good[s0]:
-                    self.good[s0] += [s1]
+                self.good[s0].add(s1)
 
     def encodeBytes(self, src):
         tokens = []
-        here = 0
+        i = 0
         while True:
-            # if here % 10000 >= 9996:
-            #     print(here)
-            s = src[here:here+1]
-            if here < len(src) - 1:
-                s0 = int(src[here])
-                s1 = int(src[here+1])
+            s = src[i:i+1]
+            if i < len(src) - 1:
+                s0 = int(src[i])
+                s1 = int(src[i+1])
                 if s1 in self.good[s0]:
-                    sss = src[here:here+self.wlen[s0]]
+                    sss = src[i:i+self.wlen[s0]]
                     for x in self.table[s0][s1]:
                         if sss.startswith(x):
                             s = x
                             break
             tokens += [self.TOKEN_TO_I[s]]
-            here += len(s)
-            assert here <= len(src)
-            if here == len(src):
+            i += len(s)
+            assert i <= len(src)
+            if i == len(src):
                 break
         return tokens
 
     def decodeBytes(self, tokens):
-        s = None
+        s = b''
         for i in tokens:
-            if s == None:
-                s = self.I_TO_TOKEN[i]
-            else:
-                s += self.I_TO_TOKEN[i]
+            s += self.I_TO_TOKEN[i]
         return s
 
     def encode(self, src):
