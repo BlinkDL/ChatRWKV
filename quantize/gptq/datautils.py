@@ -4,6 +4,7 @@ import os
 import pathlib
 import tokenizers
 import random
+from rwkv.model import RWKV
 
 from datasets import load_dataset
 
@@ -12,7 +13,7 @@ def set_seed(seed):
     torch.random.manual_seed(seed)
 
 def get_wikitext2(nsamples, seed, seqlen, model):
-    is_rwkv = True if model is None else False
+    is_rwkv = isinstance(model, RWKV)
 
     if is_rwkv:
         traindata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
@@ -37,11 +38,11 @@ def get_wikitext2(nsamples, seed, seqlen, model):
     trainloader = []
     shape = trainenc.shape if is_rwkv else trainenc.input_ids.shape
     trainenc = trainenc if is_rwkv else trainenc.input_ids
+    random_idx = [random.randint(0, shape[1] - seqlen - 1) for _ in range(nsamples)]
 
-    for _ in range(nsamples):
-        i = random.randint(0, shape[1] - seqlen - 1)
-        j = i + seqlen
-        inp = trainenc[:, i:j]
+    for i in range(nsamples):
+        j = random_idx[i] + seqlen
+        inp = trainenc[:, random_idx[i]:j]
         tar = inp.clone()
         tar[:, :-1] = -100
         trainloader.append((inp, tar))
