@@ -1,11 +1,12 @@
 
 from rwkv.model import RWKV
 from gptq.datautils import *
-from gptq.quant import Quantizer
+from gptq.quant import Quantizer, quantize
 
 import os
 import torch.nn.functional as F
 import torch.nn as nn
+import time
 import gc
 import math
 import re
@@ -31,6 +32,7 @@ class GPTQ_RWKV(RWKV):
             if len(inp.shape) == 2:
                 inp = inp.unsqueeze(0)
             
+            #TODO: is the case with len = 1 still necessary ?
             tmp = 1 if len(inp.shape) == 1 else inp.shape[0]
 
             # Assume weight come from nn.Linear
@@ -43,16 +45,88 @@ class GPTQ_RWKV(RWKV):
             inp = math.sqrt(2 / self.nsamples) * inp.float()
             self.H += inp.matmul(inp.t())
 
-        def fasterquant(self):
-            pass
+        def fasterquant(self, blocksize=128, percdamp=.01, groupsize=-1, actorder=False):
+            W = self.weight.data.clone()
+            # Need to transpose here, same reason as in __init__ with self.columns
+            W = W.t()
+            W = W.float()
+
+            tick = time.time()
+
+            if not self.quantizer.ready():
+                self.quantizer.find_params(W, weight=True)
+
+            H = self.H
+            del self.H
+            dead = torch.diag(H) == 0
+            H[dead, dead] = 1
+            W[:, dead] = 0
+
+            if actorder:
+                perm = torch.argsort(torch.diag(H), descending=True)
+                W = W[:, perm]
+                H = H[perm][:, perm]
+
+            Losses = torch.zeros_like(W)
+            Q = torch.zeros_like(W)
+
+            damp = percdamp * torch.mean(torch.diag(H))
+            diag = torch.arange(self.columns, device=self.dev)
+            H[diag, diag] += damp
+            H = torch.linalg.cholesky(H)
+            H = torch.cholesky_inverse(H)
+            H = torch.linalg.cholesky(H, upper=True)
+            Hinv = H
+
+            for i1 in range(0, self.columns, blocksize):
+                i2 = min(i1 + blocksize, self.columns)
+                count = i2 - i1
+
+                W1 = W[:, i1:i2].clone()
+                Q1 = torch.zeros_like(W1)
+                Err1 = torch.zeros_like(W1)
+                Losses1 = torch.zeros_like(W1)
+                Hinv1 = Hinv[i1:i2, i1:i2]
+
+                for i in range(count):
+                    w = W1[:, i]
+                    d = Hinv1[i, i]
+
+                    if groupsize != -1:
+                        if (i1 + i) % groupsize == 0:
+                            self.quantizer.find_params(W[:, (i1 + i):(i1 + i + groupsize)], weight=True)
+
+                    q = quantize(
+                        w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
+                    ).flatten()
+                    Q1[:, i] = q
+                    Losses1[:, i] = (w - q) ** 2 / d ** 2
+
+                    err1 = (w - q) / d
+                    W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
+                    Err1[:, i] = err1
+
+                Q[:, i1:i2] = Q1
+                Losses[:, i1:i2] = Losses1 / 2
+
+                W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
+
+            torch.cuda.synchronize()
+            print('time %.2f' % (time.time() - tick))
+            print('error', torch.sum(Losses).item())
+
+            if actorder:
+                invperm = torch.argsort(perm)
+                Q = Q[:, invperm]
+
+            self.weight.data = Q.reshape(self.weight.shape).to(self.weight.data.dtype)
+
     ### end GPTQ
 
     ### begin GPTQ_RWKV
     def __init__(self, model, strategy):
         super().__init__(model, strategy)
         #TODO: add assert to only quantize in CPU FP32 mode
-        self.subset = {}
-        self.gptq = {}
 
     def _fill_subset(self, layer_id):
         # Keep only layer within block layer_id
@@ -62,14 +136,21 @@ class GPTQ_RWKV(RWKV):
         for name in self.w.keys():
             if re.match(f'^blocks\.{layer_id}\..*\.weight$', name):
                 tensor = self.w[name]
-                print(f"{name} = {self.w[name].shape}")
+
+                #TODO: Skip 1D tensors for now
+                if len(tensor.shape) == 1:
+                    continue
                 
+                print(f"{name} = {self.w[name].shape}")
+                    
                 if re.match(f'^blocks\.{layer_id}\.(?:att|ffn)\.(?:key|value|output|receptance)\.weight$', name):
                     tensor = tensor.to(device=dev, non_blocking=True)
 
                 self.subset[name] = tensor
     
     def alloc_gptq(self, layer_id):
+        self.subset = {}
+        self.gptq = {}
 
         self._fill_subset(layer_id)
         
@@ -80,15 +161,15 @@ class GPTQ_RWKV(RWKV):
             self.gptq[name].quantizer.configure(bits=4, perchannel=True, sym=False, mse=False, trits=False)
 
     def free_gptq(self):
-        if len(self.subset) > 0: del self.subset
-        if len(self.gptq) > 0: del self.gptq
-        gc.collect()
+        self.subset = {}
+        self.gptq = {}
 
     def fasterquant(self, layer_id, quantizers):
+
         for name in self.subset:
             print(f"Quantizing {name} of layer {layer_id}")
             #TODO: add argparse to fastquant
-            self.gptq[name].fastquant(percdamp=0.01, groupsize=-1, actorder=False)
+            self.gptq[name].fasterquant(percdamp=0.01, groupsize=-1, actorder=False)
             # self.gptq[name].fastquant(percdamp=args.percdamp, groupsize=args.groupsize, actorder=args.act_order)
             quantizers[name] = self.gptq[name].quantizer
             # TODO: may be free gptq here to save memory
@@ -98,8 +179,7 @@ class GPTQ_RWKV(RWKV):
     ### begin RWKV
     def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w.weight, bias=ln_b)
-        ln_w.add_batch(x)
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kx = xx * k_mix + sx * (1 - k_mix)
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
@@ -126,8 +206,7 @@ class GPTQ_RWKV(RWKV):
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
     
     def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w.weight, bias=ln_b)
-        ln_w.add_batch(x)
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
         vx = xx * v_mix + sx * (1 - v_mix)
@@ -161,8 +240,7 @@ class GPTQ_RWKV(RWKV):
         return x + out, xx[-1,:], aa, bb, pp
 
     def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w.weight, bias=ln_b)
-        ln_w.add_batch(x)
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
@@ -176,9 +254,8 @@ class GPTQ_RWKV(RWKV):
 
     def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
         # x = (2048, 768)
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w.weight, bias=ln_b)
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         # xx = (2048, 768)
-        ln_w.add_batch(x)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         # sx = (2048, 768)
         kx = xx * k_mix + sx * (1 - k_mix)
@@ -189,8 +266,6 @@ class GPTQ_RWKV(RWKV):
         r = torch.sigmoid(rx @ rw.weight)
         # r = (2048, 768)
         rw.add_batch(rx)
-        print("kx: ", kx.shape)
-        print("kw.weight: ", kw.weight.shape)
         vx = torch.square(torch.relu(kx @ kw.weight))
         # vx = (2048, 3072)
         # kx: (2048, 768)
@@ -260,7 +335,7 @@ class GPTQ_RWKV(RWKV):
         
             x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
                 x=x, sx=state[i*5+0], aa=state[i*5+1], bb=state[i*5+2], pp=state[i*5+3],
-                ln_w=self.gptq[f'{bbb}ln1.weight'], ln_b=self.w[f'{bbb}ln1.bias'],
+                ln_w=self.w[f'{bbb}ln1.weight'], ln_b=self.w[f'{bbb}ln1.bias'],
                 k_mix=self.w[f'{att}time_mix_k'], v_mix=self.w[f'{att}time_mix_v'], r_mix=self.w[f'{att}time_mix_r'],
                 t_decay=self.w[f'{att}time_decay'], t_first=self.w[f'{att}time_first'],
                 kw=kw, vw=vw, rw=rw, ow=ow,
@@ -295,7 +370,7 @@ class GPTQ_RWKV(RWKV):
             rry = self.w[f'{ffn}receptance.weight_ry'] if wtype == torch.uint8 else x
             x, state[i*5+4] = FFN(
                 x=x, sx=state[i*5+4],
-                ln_w=self.gptq[f'{bbb}ln2.weight'], ln_b=self.w[f'{bbb}ln2.bias'],
+                ln_w=self.w[f'{bbb}ln2.weight'], ln_b=self.w[f'{bbb}ln2.bias'],
                 k_mix=self.w[f'{ffn}time_mix_k'], r_mix=self.w[f'{ffn}time_mix_r'],
                 kw=kw, vw=vw, rw=rw,
                 kmx=kmx, krx=krx, kmy=kmy, kry=kry,
@@ -346,6 +421,7 @@ print("tokens.shape", tokens.shape)
 
 model = GPTQ_RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
 
+#TODO: Do the same in GPU side
 with torch.no_grad():
     seq_mode = len(tokens) > 1
     x = model.w['emb.weight'][tokens if seq_mode else tokens[0]]
@@ -356,13 +432,12 @@ with torch.no_grad():
 
         model.alloc_gptq(layer_id)
 
-        # TODO: call add_batch() for each layer inside att_seq etc function
         for j in range(NSAMPLES):
             _ = model.forward_block(x[j], state=None, i=layer_id, seq_mode=seq_mode)
+            
+        model.fasterquant(layer_id, quantizers)
 
-        # model.fasterquant(layer_id, quantizers)
-
-        # model.free_gptq()
+        model.free_gptq()
 
         #TODO: Since we quantize per block, we should pass the outputs of block 0 to input of block 1 ?
         # inps, outs = outs, inps
