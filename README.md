@@ -10,12 +10,13 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 Update ChatRWKV v2 & pip rwkv package (0.7.3):
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
+
+Note RWKV_CUDA_ON will build a CUDA kernel ("pip install ninja" first). Here is how to build it:
 ```
-### Note RWKV_CUDA_ON will build a CUDA kernel ("pip install ninja" first).
-### How to build in Linux: set these and run v2/chat.py
+# How to build in Linux: set these and run v2/chat.py
 export PATH=/usr/local/cuda/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-### How to build in win:
+# How to build in win:
 Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe select Desktop C++). Reinstall CUDA 11.7 (install VC++ extensions). Run v2/chat.py in "x64 native tools command prompt". 
 ```
 
