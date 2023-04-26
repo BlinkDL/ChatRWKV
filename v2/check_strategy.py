@@ -77,7 +77,7 @@ def is_installed(package):
     return spec is not None
 
 def ReadModelStrategy(model_path):
-    w = torch.load(model_path)
+    w = torch.load(model_path, map_location=torch.device('cpu'))
     if '_strategy' in w:
         stgy = w['_strategy']
     else:
