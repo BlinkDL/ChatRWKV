@@ -63,13 +63,13 @@ When you build a RWKV chatbot, always check the text corresponding to the state,
 
 Cool Community RWKV Projects:
 
-https://pypi.org/project/rwkvstic/ pip package (with 8bit & offload for low VRAM GPUs)
+https://github.com/saharNooby/rwkv.cpp FP32, FP16 and quantized INT4 inference for CPU using [ggml](https://github.com/ggerganov/ggml)
 
-**https://github.com/saharNooby/rwkv.cpp rwkv.cpp for fast CPU reference**
+https://github.com/harrisonvanderbyl/rwkv-cpp-cuda pure CUDA RWKV (no need for python & pytorch)
 
-https://github.com/wfox4/WebChatRWKVv2 WebUI
+https://github.com/Blealtan/RWKV-LM-LoRA LoRA fine-tuning
 
-https://github.com/cryscan/eloise RWKV QQ bot
+More RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
 
 The lastest "Raven"-series Alpaca-style-tuned RWKV 14B & 7B models are very good (almost ChatGPT-like, good at multiround chat too). Download: https://huggingface.co/BlinkDL/rwkv-4-raven
 
