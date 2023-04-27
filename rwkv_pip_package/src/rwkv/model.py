@@ -36,28 +36,31 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
     @MyStatic
     def cuda_wkv(T: int, C: int, w, u, k, v, aa, bb, pp):
         assert 1 * C % min(C, 32) == 0
-        assert k.dtype == torch.float16
+        assert k.dtype == v.dtype == torch.float16 or k.dtype == v.dtype == torch.float32
+        assert w.dtype == u.dtype == aa.dtype == bb.dtype == pp.dtype == torch.float32
         w = w.contiguous()
         u = u.contiguous()
         k = k.contiguous()
         v = v.contiguous()
-        y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.float16)
+        y = torch.empty((T, C), device=w.device, memory_format=torch.contiguous_format, dtype=k.dtype)
         torch.ops.rwkv.wkv_forward(1, T, C, w, u, k, v, y, aa, bb, pp)
         return y, aa, bb, pp
     @MyStatic
     def cuda_mm8_seq(B: int, N: int, M: int, x, w, mx, rx, my, ry):
-        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype == torch.float16
+        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
+        assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
         assert x.shape == [B, N]
         assert w.shape == [N, M]
         assert rx.shape == mx.shape == [M]
         assert ry.shape == my.shape == [N, 1]
-        y = torch.empty((B, M), device=w.device, dtype=torch.float16)
+        y = torch.empty((B, M), device=w.device, dtype=x.dtype)
         torch.ops.rwkv.mm8_seq(B, N, M, x, w, mx, rx, my, ry, y)
         return y
     @MyStatic
     def cuda_mm8_one(N: int, M: int, x, w, mx, rx, my, ry):
-        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype == torch.float16
+        assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
+        assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
         assert x.shape == [N]
         assert w.shape == [N, M]
@@ -65,7 +68,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert ry.shape == my.shape == [N, 1]
         y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
-        return y.to(dtype=torch.float16)
+        return y.to(dtype=x.dtype)
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
 
@@ -317,23 +320,32 @@ class RWKV(MyModule):
             if 'cuda' in args.strategy_string:
                 torch.cuda.empty_cache()
 
+    @MyFunction
+    def torch_mm8_seq(self, x, w, mx, rx, my, ry):
+        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+
+    @MyFunction
+    def torch_mm8_one(self, x, w, mx, rx, my, ry):
+        return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+
     if os.environ.get('RWKV_CUDA_ON') == '1':
         @MyFunction
         def mm8_seq(self, x, w, mx, rx, my, ry):
-            B, N, M = x.shape[0], w.shape[0], w.shape[1]
-            return cuda_mm8_seq(B, N, M, x, w, mx, rx, my, ry)
+            if w.device.type == 'cuda' and x.dtype == torch.float16:
+                B, N, M = x.shape[0], w.shape[0], w.shape[1]
+                return cuda_mm8_seq(B, N, M, x, w, mx, rx, my, ry)
+            else:
+                return self.torch_mm8_seq(x, w, mx, rx, my, ry)
         @MyFunction
         def mm8_one(self, x, w, mx, rx, my, ry):
-            N, M = w.shape[0], w.shape[1]
-            return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
+            if w.device.type == 'cuda':
+                N, M = w.shape[0], w.shape[1]
+                return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
+            else:
+                return self.torch_mm8_one(x, w, mx, rx, my, ry)
     else:
-        @MyFunction
-        def mm8_seq(self, x, w, mx, rx, my, ry):
-            return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
-
-        @MyFunction
-        def mm8_one(self, x, w, mx, rx, my, ry):
-            return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
+        mm8_seq = torch_mm8_seq
+        mm8_one = torch_mm8_one
 
     ########################################################################################################
 
