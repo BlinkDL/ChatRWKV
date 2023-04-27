@@ -22,6 +22,8 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
+**Raven Q&A demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/v2/benchmark_more.py
+
 ![ChatRWKV-strategy](ChatRWKV-strategy.png)
 
 ## RWKV Discord: https://discord.gg/bDSBUMeFpc (let's build together)
