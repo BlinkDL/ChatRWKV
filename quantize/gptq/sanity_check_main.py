@@ -16,6 +16,7 @@ GROUPSIZE = -1
 def quantize_gptq(model, train_loader, device):
     quantizers = {}
     layers = list(model.modules())[1:]
+    layers = [l for l in layers if isinstance(l, nn.Linear)]
     is_last_layer = lambda x: x == (len(layers) - 1)
 
     nsamples = len(train_loader.dataset)
@@ -25,6 +26,7 @@ def quantize_gptq(model, train_loader, device):
     for i, (inp, _) in enumerate(train_loader):
         inps[i*batch_size:(i+1)*batch_size] = inp.view(-1, 32*32)
     outs = torch.zeros_like(inps)
+    
 
     for layer_id in range(len(layers)):
         layer = layers[layer_id]
@@ -58,7 +60,7 @@ def quantize_gptq(model, train_loader, device):
         for name in subset:
             print(i, name)
             print('Quantizing ...')
-            scale,zero,g_idx = gptq[name].fasterquant(percdamp=0.1, groupsize=GROUPSIZE, actorder=False)
+            scale,zero,g_idx = gptq[name].fasterquant(percdamp=0.01, groupsize=GROUPSIZE, actorder=False)
             quantizers[f"linear{layer_id + 1}"] = (gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
             gptq[name].free()
 
@@ -106,6 +108,7 @@ if __name__ == "__main__":
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--gptq", action="store_true")
     parser.add_argument("--eval_gptq", action="store_true")
+    parser.add_argument("--pyquant", action="store_true")
 
     args = parser.parse_args()
 
@@ -123,6 +126,7 @@ if __name__ == "__main__":
         train(num_epochs, model, optimizer, criterion, train_loader, device)
         torch.save(model.state_dict(), "model.pt")
     elif args.gptq:
+        #FIXME: WHY ON EARTH QUANTIZATION ERROR IS SO DAMN HIGH FOR LAYER 3 AND 4 ?!
         device = torch.device("cpu")
         model.load_state_dict(torch.load("./model.pt",  map_location="cpu"))
         model = model.to(device)
@@ -142,6 +146,28 @@ if __name__ == "__main__":
         print(f"wbits = {WBITS} using {device}")
         print(f"val_loss: {val_loss:.3f} \t val_acc: {val_acc:.3f}")
         print(f"Latency: {end - start}")
+    elif args.pyquant:
+        # Baseline post-training quantization from Pytorch
+        device = torch.device("cpu")
+        model.load_state_dict(torch.load("./model.pt"))
+        model.eval()
+        model.qconfig = torch.ao.quantization.get_default_qconfig('x86')
+        model_prepared = torch.ao.quantization.prepare(model)
+        
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model_prepared.forward(inputs, is_pyquant=True)
+
+        model_quant = torch.ao.quantization.convert(model_prepared)
+
+        start_q = time.time()
+        val_loss_q, val_acc_q = evaluate(device, model_quant, criterion, train_loader, is_pyquant=True)
+        end_q = time.time()
+
+        print("Pytorch post-training quantization INT8")
+        print(model_quant)
+        print(f"val_loss_q: {val_loss_q:.3f} \t val_acc_q:{val_acc_q:.3f}")
+        print(f"Latency: {end_q - start_q}")
     else:
         device = torch.device("cpu")
         model.load_state_dict(torch.load("./model.pt",  map_location="cpu"))
