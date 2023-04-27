@@ -344,8 +344,12 @@ class RWKV(MyModule):
             else:
                 return self.torch_mm8_one(x, w, mx, rx, my, ry)
     else:
-        mm8_seq = torch_mm8_seq
-        mm8_one = torch_mm8_one
+        @MyFunction
+        def mm8_seq(self, x, w, mx, rx, my, ry):
+            return self.torch_mm8_seq(x, w, mx, rx, my, ry)
+        @MyFunction
+        def mm8_one(self, x, w, mx, rx, my, ry):
+            return self.torch_mm8_one(x, w, mx, rx, my, ry)
 
     ########################################################################################################
 
