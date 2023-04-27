@@ -54,6 +54,8 @@ If I eat 7,000 calories above my basal metabolic rate, how much weight do I gain
 What is the squareroot of 10000?
 '''.strip().split('\n')
 
+PAD_TOKENS = [] # [] or [0] or [187]
+
 print(MODEL_NAME)
 for q in QUESTIONS:
     print(f'Q: {q.strip()}\nA:', end = '')
@@ -65,7 +67,7 @@ for q in QUESTIONS:
     state = None
     ctx = f'Bob: {q.strip()}\n\nAlice:' # special prompt for Raven Q & A
     for i in range(200):
-        tokens = pipeline.encode(ctx) if i == 0 else [token]
+        tokens = PAD_TOKENS + pipeline.encode(ctx) if i == 0 else [token]
         
         out, state = pipeline.model.forward(tokens, state)
         for n in occurrence:
