@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
+from collections import OrderedDict
 
 def seed_everything(seed: int):
     random.seed(seed)
@@ -22,13 +23,16 @@ class SimpleNet(nn.Module):
     def __init__(self, num_classes=10, init_weights=True):
         super(SimpleNet, self).__init__()
         self.N = 32 * 32
-        self.linear1 = nn.Linear(in_features=32 * 32, out_features=self.N)
+ 
+        self.linear1 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear2 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear3 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear4 = nn.Linear(in_features=self.N, out_features=num_classes)
 
     def forward(self, x):
         # Assume input is already flattened
+        if len(x.shape) == 4:
+            x = x.view(x.size(0), -1)
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
         x = F.relu(self.linear3(x))

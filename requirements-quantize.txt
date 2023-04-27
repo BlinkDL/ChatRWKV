@@ -8,3 +8,5 @@ tokenizers>=0.13.2
 prompt_toolkit
 # Debug
 pdbpp
+line_profiler
+torchvision==0.14.1+cu117

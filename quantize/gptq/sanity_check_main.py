@@ -10,6 +10,9 @@ from gptq import *
 from modelutils import *
 from quant import *
 
+WBITS = 8
+GROUPSIZE = -1
+
 def quantize_gptq(model, train_loader, device):
     quantizers = {}
     layers = list(model.modules())[1:]
@@ -32,8 +35,7 @@ def quantize_gptq(model, train_loader, device):
         for name in subset:
             gptq[name] = GPTQ(subset[name], name)
             gptq[name].quantizer = Quantizer()
-            # TODO: 8 bits quantize so that we can compare with pytorch post-training quantization
-            gptq[name].quantizer.configure(bits=8, perchannel=True, sym=False, mse=False, trits=False)
+            gptq[name].quantizer.configure(bits=WBITS, perchannel=True, sym=False, mse=False, trits=False)
 
         def add_batch(name):
             def tmp(_, inp, out):
@@ -56,10 +58,9 @@ def quantize_gptq(model, train_loader, device):
         for name in subset:
             print(i, name)
             print('Quantizing ...')
-            gptq[name].fasterquant(percdamp=0.1, groupsize=-1, actorder=False)
-            quantizers['model.decoder.layers.%d.%s' % (i, name)] = gptq[name].quantizer
+            scale,zero,g_idx = gptq[name].fasterquant(percdamp=0.1, groupsize=GROUPSIZE, actorder=False)
+            quantizers[f"linear{layer_id + 1}"] = (gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
             gptq[name].free()
-
 
         for i in range(nsamples):
             if not is_last_layer(layer_id):
@@ -73,13 +74,38 @@ def quantize_gptq(model, train_loader, device):
 
         if not is_last_layer(layer_id):
             inps, outs = outs, inps
+    
+    return quantizers
+
+# TODO: perform packing on GPU
+def model_pack(model, quantizers, wbits, groupsize):
+    layers = find_layers(model)
+    layers = {n: layers[n] for n in quantizers}
+    make_quant(model, quantizers, wbits, groupsize)
+    qlayers = find_layers(model, [QuantLinear])
+    print('Packing ...')
+    for name in qlayers:
+        print(name)
+        quantizers[name],scale,zero,g_idx = quantizers[name]
+        qlayers[name].pack(layers[name], scale, zero, g_idx)
+    print('Done.')
+    return model
+
+def load_quant(model, checkpoint, wbits, groupsize):
+    print('Loading model ...')
+    model = model.eval()
+    layers = find_layers(model)
+    make_quant(model, layers, wbits, groupsize)    
+    model.load_state_dict(torch.load(checkpoint))
+    print('Done.')
+    return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--gptq", action="store_true")
-    parser.add_argument("--pyquant", action="store_true")
+    parser.add_argument("--eval_gptq", action="store_true")
 
     args = parser.parse_args()
 
@@ -100,9 +126,22 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         model.load_state_dict(torch.load("./model.pt",  map_location="cpu"))
         model = model.to(device)
-        quantize_gptq(model, train_loader, device)
-    elif args.pyquant:
-        pass
+        quantizers = quantize_gptq(model, train_loader, device)
+        model_pack(model, quantizers, WBITS, GROUPSIZE)
+        torch.save(model.state_dict(), "model_quantized.pt") 
+        print("Done GPTQ")
+    elif args.eval_gptq:
+        device = torch.device("cuda:0")
+        model = load_quant(model, "model_quantized.pt", WBITS, GROUPSIZE)
+        model = model.to(device)
+
+        start = time.time()
+        val_loss, val_acc = evaluate(device, model, criterion, train_loader)
+        end = time.time()
+
+        print(f"wbits = {WBITS} using {device}")
+        print(f"val_loss: {val_loss:.3f} \t val_acc: {val_acc:.3f}")
+        print(f"Latency: {end - start}")
     else:
         device = torch.device("cpu")
         model.load_state_dict(torch.load("./model.pt",  map_location="cpu"))
