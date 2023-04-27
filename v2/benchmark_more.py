@@ -15,9 +15,9 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' # set to '1' for faster processing
 
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-1B5-v11-Eng99%-Other1%-20230425-ctx4096'
+# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-1B5-v11-Eng99%-Other1%-20230425-ctx4096'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v11-Eng99%-Other1%-20230425-ctx4096'
-# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v11-Eng99%-Other1%-20230427-ctx8192'
+MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v11-Eng99%-Other1%-20230427-ctx8192'
 
 print(f'\nLoading ChatRWKV https://github.com/BlinkDL/ChatRWKV')
 import torch
