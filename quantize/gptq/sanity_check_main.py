@@ -13,10 +13,12 @@ from quant import *
 WBITS = 8
 GROUPSIZE = -1
 
-def quantize_gptq(model, train_loader, device):
+@torch.no_grad()
+def quantize_gptq(model, train_loader):
     quantizers = {}
     layers = list(model.modules())[1:]
     layers = [l for l in layers if isinstance(l, nn.Linear)]
+    layers = layers[:-1]
     is_last_layer = lambda x: x == (len(layers) - 1)
 
     nsamples = len(train_loader.dataset)
@@ -37,7 +39,7 @@ def quantize_gptq(model, train_loader, device):
         for name in subset:
             gptq[name] = GPTQ(subset[name], name)
             gptq[name].quantizer = Quantizer()
-            gptq[name].quantizer.configure(bits=WBITS, perchannel=True, sym=False, mse=False, trits=False)
+            gptq[name].quantizer.configure(bits=WBITS, perchannel=True, sym=True, mse=False, trits=False)
 
         def add_batch(name):
             def tmp(_, inp, out):
@@ -88,7 +90,7 @@ def model_pack(model, quantizers, wbits, groupsize):
     print('Packing ...')
     for name in qlayers:
         print(name)
-        quantizers[name],scale,zero,g_idx = quantizers[name]
+        quantizers[name],scale,zero,g_idx = quantizers[name] 
         qlayers[name].pack(layers[name], scale, zero, g_idx)
     print('Done.')
     return model
@@ -97,6 +99,13 @@ def load_quant(model, checkpoint, wbits, groupsize):
     print('Loading model ...')
     model = model.eval()
     layers = find_layers(model)
+
+    # Don't quantize the last layer because qzeros is empty (I don't know why they create qzeros that way)
+    # (gptq.py:L235, second dimension of qzeros is 0 because last layer is 10 for classification)
+    for name in ["linear4"]:
+        if name in layers:
+            del layers[name]
+
     make_quant(model, layers, wbits, groupsize)    
     model.load_state_dict(torch.load(checkpoint))
     print('Done.')
@@ -126,11 +135,10 @@ if __name__ == "__main__":
         train(num_epochs, model, optimizer, criterion, train_loader, device)
         torch.save(model.state_dict(), "model.pt")
     elif args.gptq:
-        #FIXME: WHY ON EARTH QUANTIZATION ERROR IS SO DAMN HIGH FOR LAYER 3 AND 4 ?!
         device = torch.device("cpu")
         model.load_state_dict(torch.load("./model.pt",  map_location="cpu"))
         model = model.to(device)
-        quantizers = quantize_gptq(model, train_loader, device)
+        quantizers = quantize_gptq(model, train_loader)
         model_pack(model, quantizers, WBITS, GROUPSIZE)
         torch.save(model.state_dict(), "model_quantized.pt") 
         print("Done GPTQ")
@@ -156,7 +164,7 @@ if __name__ == "__main__":
         
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model_prepared.forward(inputs, is_pyquant=True)
+            outputs = model_prepared.forward_pyquant(inputs)
 
         model_quant = torch.ao.quantization.convert(model_prepared)
 

@@ -27,84 +27,44 @@ class SimpleNet(nn.Module):
         self.linear2 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear3 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear4 = nn.Linear(in_features=self.N, out_features=num_classes)
-        
+
         self.quant = torch.ao.quantization.QuantStub()
         self.dequant = torch.ao.quantization.DeQuantStub()
         self.skip_add = nn.quantized.FloatFunctional()
 
-    def forward(self, x, is_pyquant=False):
+    def forward(self, x):
         if len(x.shape) == 4:
             x = x.view(x.size(0), -1)
 
-        if is_pyquant: x = self.quant(x)
+        residual = x
+
+        x = F.relu(self.linear1(x))
+        x = self.linear2(x)
+        x = F.relu(x) + residual
+        x = self.linear3(x)
+        x = F.relu(x) + residual
+        x = self.linear4(x)        
+        return  x
+    
+    def forward_pyquant(self, x):
+        
+        if len(x.shape) == 4:
+            x = x.view(x.size(0), -1)
+
+        x = self.quant(x)
 
         residual = x
-        x = F.relu(self.linear1(x))
-        
+
+        x = F.relu(self.linear1(x))        
         x = self.linear2(x)
-
-        if is_pyquant:
-            x = self.skip_add.add(F.relu(x), residual)
-        else:
-            x = F.relu(x) + residual
-        
+        x = self.skip_add.add(F.relu(x), residual)
         x = self.linear3(x)
-        
-        if is_pyquant:
-            x = self.skip_add.add(F.relu(x), residual)
-        else:
-            x = F.relu(x) + residual
-        
+        x = self.skip_add.add(F.relu(x), residual)
         x = self.linear4(x)
-        
-        if is_pyquant: x = self.dequant(x)
-        
-        return  x
 
-# class ResNet(nn.Module):
-#     class BasicBlock(nn.Module):
-#         expansion = 1
+        x = self.dequant(x)
 
-#         def __init__(self, in_planes, planes, stride=1):
-#             super().__init__()
-#             self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-#             self.conv2 = nn.Conv2d(planes, planes, kernel_size=3,stride=1, padding=1, bias=False)
-
-#             self.shortcut = lambda x: x
-#             if stride != 1 or in_planes != self.expansion*planes:
-#                 self.shortcut = nn.Conv2d(in_planes, self.expansion*planes,kernel_size=1, stride=stride, bias=False)
-
-#             self.skip_add = nn.quantized.FloatFunctional()
-
-#         def forward(self, x, is_pyquant=False):
-#             out = F.relu(self.conv1(x))
-#             out = self.conv2(out)
-#             if is_pyquant:
-#                 out = self.skip_add.add(out, self.shortcut(x))
-#             else:
-#                 out += self.shortcut(x)
-#             out = F.relu(out)
-#             return out
-    
-#     def __init__(self, num_classes=10):
-#         super(ResNet, self).__init__()
-#         self.conv1 = nn.Conv2d(1, 1, kernel_size=3,stride=1, padding=1, bias=False)
-#         self.layer1 = self.BasicBlock(1, 1, stride=1)
-#         self.linear = nn.Linear(64, num_classes)
-#         self.quant = torch.ao.quantization.QuantStub()
-#         self.dequant = torch.ao.quantization.DeQuantStub()
-
-#     def forward(self, x, is_pyquant=False):
-#         if is_pyquant:
-#             x = self.quant(x)
-#         out = F.relu(self.conv1(x))
-#         out = self.layer1.forward(out, is_pyquant=is_pyquant)
-#         out = F.avg_pool2d(out, 4)
-#         out = torch.flatten(out, 1)
-#         out = self.linear(out)
-#         if is_pyquant:
-#             out = self.dequant(out)
-#         return out
+        return x
 
 # Dataset
 
@@ -185,7 +145,6 @@ class MNISTloader:
         return train_loader, val_loader, test_loader
 
 # Train + evaluate
-
 def evaluate(device, model, criterion, val_loader, is_pyquant=False):
 
     val_loss_running, val_acc_running = 0, 0
@@ -195,7 +154,10 @@ def evaluate(device, model, criterion, val_loader, is_pyquant=False):
     with torch.no_grad():
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model.forward(inputs, is_pyquant)
+            if is_pyquant:
+                outputs = model.forward_pyquant(inputs)
+            else:
+                outputs = model(inputs)
             loss = criterion(outputs, labels)
             _, predictions = torch.max(outputs, dim=1)
             val_loss_running += loss.item() * inputs.shape[0]
