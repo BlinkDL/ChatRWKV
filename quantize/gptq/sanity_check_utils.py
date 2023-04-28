@@ -20,7 +20,7 @@ def seed_everything(seed: int):
 
 # Model
 class SimpleNet(nn.Module):
-    def __init__(self, num_classes=10, init_weights=True):
+    def __init__(self, num_classes=10):
         super(SimpleNet, self).__init__()
         self.N = 32 * 32
         self.linear1 = nn.Linear(in_features=self.N, out_features=self.N)
@@ -64,6 +64,42 @@ class SimpleNet(nn.Module):
 
         x = self.dequant(x)
 
+        return x
+
+class SimpleNet_V2(nn.Module):
+    def __init__(self, num_classes=10):
+        super(SimpleNet_V2, self).__init__()
+        self.N = 32 * 32
+        self.linear0_w = nn.Parameter(torch.randn(self.N, self.N))
+        self.linear0_b = nn.Parameter(torch.randn(self.N))
+        self.linear1_w = nn.Parameter(torch.randn(self.N, self.N))
+        self.linear1_b = nn.Parameter(torch.randn(self.N))
+        self.linear2_w = nn.Parameter(torch.randn(self.N, self.N))
+        self.linear2_b = nn.Parameter(torch.randn(self.N))
+        self.linear3_w = nn.Parameter(torch.randn(self.N, num_classes))
+        self.linear3_b = nn.Parameter(torch.randn(num_classes))
+
+        self.w = {}
+        self.nb_layers = 0
+        for i in range(0, 4):
+            self.w[f"linear{i}_w"] = getattr(self, f"linear{i}_w")
+            self.w[f"linear{i}_b"] = getattr(self, f"linear{i}_b")
+            self.nb_layers += 1
+
+    def my_linear(self, x, weight, bias):
+        return x @ weight + bias
+
+    def forward(self, x):
+        if len(x.shape) == 4:
+            x = x.view(x.size(0), -1)
+
+        residual = x
+        x = F.relu(self.my_linear(x, self.linear0_w, self.linear0_b))
+        x = self.my_linear(x, self.linear1_w, self.linear1_b)
+        x = F.relu(x) + residual
+        x = self.my_linear(x, self.linear2_w, self.linear2_b)
+        x = F.relu(x) + residual
+        x = self.my_linear(x, self.linear3_w, self.linear3_b)
         return x
 
 # Dataset
