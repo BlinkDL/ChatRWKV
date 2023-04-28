@@ -356,13 +356,14 @@ Below is an instruction that describes a task. Write a response that appropriate
             )
             # if token == END_OF_TEXT:
             #     break
+            tokens = [END_OF_LINE, END_OF_LINE] if token == END_OF_TEXT else [token]
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
             
             out = run_rnn([token], newline_adj=newline_adj)
-            out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
+            # out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
 
             xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues

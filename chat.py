@@ -411,7 +411,7 @@ def on_message(message):
                 top_p=x_top_p,
             )
 
-            tokens = tokenizer.encode('\n\n') if token == 0 else [token]
+            tokens = [187, 187] if token == 0 else [token]
             out = run_rnn(tokens, newline_adj=newline_adj)
 
             xxx = tokenizer.decode(model_tokens[out_last:])
