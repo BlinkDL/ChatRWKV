@@ -4,6 +4,8 @@ import re
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from collections import OrderedDict
+import torch.nn.functional as F
 
 from sanity_check_utils import seed_everything, MNISTloader, SimpleNet, train, evaluate, SimpleNet_V2
 from gptq import *
@@ -34,9 +36,8 @@ def load_quant(model, checkpoint, wbits, groupsize):
 
     # Don't quantize the last layer because qzeros is empty (I don't know why they create qzeros that way)
     # (gptq.py:L235, second dimension of qzeros is 0 because last layer is 10 for classification)
-    for name in ["linear4"]:
-        if name in layers:
-            del layers[name]
+    if "linear4" in layers:
+        del layers["linear4"]
 
     make_quant(model, layers, wbits, groupsize)    
     model.load_state_dict(torch.load(checkpoint))
@@ -258,8 +259,8 @@ class GPTQ_CUSTOM(SimpleNet_V2):
     ### begin GPTQ_CUSTOM
     def __init__(self, checkpoint_path):
         super().__init__()
-        self.load_state_dict(torch.load(checkpoint_path,  map_location="cpu"))        
-    
+        self.load_state_dict(torch.load(checkpoint_path,  map_location="cpu"))
+
     def _fill_subset(self, layer_id):
         is_last_layer = (layer_id == self.nb_layers - 1)
         if is_last_layer:
@@ -292,7 +293,7 @@ class GPTQ_CUSTOM(SimpleNet_V2):
             print(layer_id, name)
             print('Quantizing ...')
             scale,zero,g_idx = self.gptq[name].fasterquant(percdamp=0.01, groupsize=GROUPSIZE, actorder=False)
-            quantizers[f"linear{layer_id + 1}"] = (self.gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
+            quantizers[f"linear{layer_id}_w"] = (self.gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
 
     ## end GPTQ_CUSTOM
 
@@ -301,6 +302,19 @@ class GPTQ_CUSTOM(SimpleNet_V2):
         out = x @ weight.weight + bias
         weight.add_batch(x)
         return out
+
+    def forward(self, x):
+        if len(x.shape) == 4:
+            x = x.view(x.size(0), -1)
+        
+        residual = x
+        x = F.relu(self.linear0_quant(x))
+        x = self.linear1_quant(x)
+        x = F.relu(x) + residual
+        x = self.linear2_quant(x)
+        x = F.relu(x) + residual
+        x = super().my_linear(x, self.linear3_w, self.linear3_b)
+        return x
     ## End SimpleNet_V2
 
 
@@ -321,9 +335,11 @@ def quantize_gptq_custom(model, train_loader):
     quantizers = {}
 
     for layer_id in range(nb_layers):
-
+        
         if not is_last_layer(layer_id):
-    
+            
+            print(f"Quantizing layer {layer_id} ...")
+
             model.alloc_gptq(layer_id)
 
             for i in range(nsamples):
@@ -342,12 +358,56 @@ def quantize_gptq_custom(model, train_loader):
 
     return quantizers
 
-
 def model_pack_custom(model, quantizers, wbits, groupsize):
-    pass
+    # Extract weights and bias from model
+    is_weight = re.compile(r'^linear\d+_w$')
+    weights, bias = OrderedDict(), OrderedDict()
+    for name, param in model.w.items():
+        if is_weight.match(name):
+            weights[name] = param
+        else:
+            bias[name] = param
 
-def load_quant_custom(model, quantizers, wbits, groupsize):
-    pass
+    make_quant_custom(model, quantizers, wbits, groupsize)
+    qlayers = find_layers(model, [QuantLinear_custom])
+
+    print('Packing ...')
+    for i in range(len(qlayers)):
+        name_w, name_b, layer_quant_name = f'linear{i}_w', f'linear{i}_b', f'linear{i}_quant'
+        quantizers[name_w],scale,zero,g_idx = quantizers[name_w]
+        qlayers[layer_quant_name].pack(weights[name_w], bias[name_b], scale, zero, g_idx)
+    print('Done.')
+    return model
+
+def load_quant_custom(model, checkpoint, wbits, groupsize):
+    print('Loading model ...')
+    model = model.eval()
+    # Extract weights and bias from model
+    is_weight = re.compile(r'^linear\d+_w$')
+    weights, bias = OrderedDict(), OrderedDict()
+    for name, param in model.w.items():
+        if is_weight.match(name):
+            weights[name] = param
+        else:
+            bias[name] = param
+    
+    # Create linear layer out of weights and bias
+    layers = {}
+    for (w_name, w_param), (_, b_param) in zip(weights.items(), bias.items()):
+        layers[w_name] = nn.Linear(w_param.shape[1], w_param.shape[0], bias=True)
+        layers[w_name].weight.data = w_param
+        layers[w_name].bias.data = b_param
+
+    # Don't quantize the last layer because qzeros is empty (I don't know why they create qzeros that way)
+    # (gptq.py:L235, second dimension of qzeros is 0 because last layer is 10 for classification)
+    if "linear3_w" in layers:
+        del layers["linear3_w"]
+    
+    make_quant_custom(model, layers, wbits, groupsize)    
+    model.load_state_dict(torch.load(checkpoint))
+    print('Done.')
+    return model
+
 
 def assert_parameters(model, model_custom):
     is_weight = re.compile(r'^linear\d+.weight$')
@@ -371,6 +431,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval_gptq", action="store_true")
     parser.add_argument("--train_custom", action="store_true")
     parser.add_argument("--gptq_custom", action="store_true")
+    parser.add_argument("--eval_gptq_custom", action="store_true")
     parser.add_argument("--pyquant", action="store_true")
 
     args = parser.parse_args()
@@ -381,7 +442,9 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     train_loader, _, _ = MNISTloader(train_val_split=0.95).load()
 
-    #TODO: Do Custom packing
+    #TODO: Do custom eval gptq
+    #TODO: Is reference GPTQ quantizing bias as well ?
+    #TODO: Add seed everywhere in GPT for reproducibility
 
     ## ================== REFERENCE ==================
     if args.train:
@@ -430,6 +493,19 @@ if __name__ == "__main__":
         model_pack_custom(model, quantizers, WBITS, GROUPSIZE)
         torch.save(model.state_dict(), "model_quantized_custom.pt")
         print("Done Custom GPTQ")
+    elif args.eval_gptq_custom:
+        model = GPTQ_CUSTOM("./model_custom.pt")
+        device = torch.device("cuda:0")
+        model = load_quant_custom(model, "model_quantized_custom.pt", WBITS, GROUPSIZE)
+        model = model.to(device)
+
+        start = time.time()
+        val_loss, val_acc = evaluate(device, model, criterion, train_loader)
+        end = time.time()
+
+        print(f"wbits = {WBITS} using {device}")
+        print(f"val_loss: {val_loss:.3f} \t val_acc: {val_acc:.3f}")
+        print(f"Latency: {end - start}")
     ## ================== MISC ==================
     elif args.pyquant:
         # Baseline post-training quantization from Pytorch
