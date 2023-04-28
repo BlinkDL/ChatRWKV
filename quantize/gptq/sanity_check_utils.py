@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
-from collections import OrderedDict
+import math
 
 def seed_everything(seed: int):
     random.seed(seed)
@@ -22,6 +22,8 @@ def seed_everything(seed: int):
 class SimpleNet(nn.Module):
     def __init__(self, num_classes=10):
         super(SimpleNet, self).__init__()
+        seed_everything(42)
+        
         self.N = 32 * 32
         self.linear1 = nn.Linear(in_features=self.N, out_features=self.N)
         self.linear2 = nn.Linear(in_features=self.N, out_features=self.N)
@@ -69,15 +71,28 @@ class SimpleNet(nn.Module):
 class SimpleNet_V2(nn.Module):
     def __init__(self, num_classes=10):
         super(SimpleNet_V2, self).__init__()
+        seed_everything(42)
         self.N = 32 * 32
-        self.linear0_w = nn.Parameter(torch.randn(self.N, self.N))
-        self.linear0_b = nn.Parameter(torch.randn(self.N))
-        self.linear1_w = nn.Parameter(torch.randn(self.N, self.N))
-        self.linear1_b = nn.Parameter(torch.randn(self.N))
-        self.linear2_w = nn.Parameter(torch.randn(self.N, self.N))
-        self.linear2_b = nn.Parameter(torch.randn(self.N))
-        self.linear3_w = nn.Parameter(torch.randn(self.N, num_classes))
-        self.linear3_b = nn.Parameter(torch.randn(num_classes))
+        
+        self.linear0_w = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.N, self.N), a=math.sqrt(5)))
+        fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.linear0_w)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        self.linear0_b = nn.Parameter(torch.nn.init.uniform_(torch.empty(self.N), -bound, bound))
+
+        self.linear1_w = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.N, self.N), a=math.sqrt(5)))
+        fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.linear1_w)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        self.linear1_b = nn.Parameter(torch.nn.init.uniform_(torch.empty(self.N), -bound, bound))
+        
+        self.linear2_w = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.N, self.N), a=math.sqrt(5)))
+        fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.linear2_w)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        self.linear2_b = nn.Parameter(torch.nn.init.uniform_(torch.empty(self.N), -bound, bound))
+        
+        self.linear3_w = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(num_classes, self.N), a=math.sqrt(5)))
+        fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.linear3_w)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        self.linear3_b = nn.Parameter(torch.nn.init.uniform_(torch.empty(num_classes), -bound, bound))
 
         self.w = {}
         self.nb_layers = 0
@@ -87,7 +102,9 @@ class SimpleNet_V2(nn.Module):
             self.nb_layers += 1
 
     def my_linear(self, x, weight, bias):
-        return x @ weight + bias
+        # return x @ weight.t() + bias.
+        #  Although this is the same, they yield different results as here: https://discuss.pytorch.org/t/differences-between-implementations/129237
+        return F.linear(x, weight, bias)
 
     def forward(self, x):
         if len(x.shape) == 4:

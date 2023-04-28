@@ -243,7 +243,7 @@ class GPTQ_CUSTOM(SimpleNet_V2):
 
             #TODO: Do we have to uncomment it ?
             # if isinstance(self.layer, transformers.Conv1D):
-            #     Q = Q.t()
+            #   Q = Q.t()
             self.weight.data = Q.reshape(self.weight.shape).to(self.weight.data.dtype)
            
             if scale == []:
@@ -346,6 +346,24 @@ def quantize_gptq_custom(model, train_loader):
 def model_pack_custom(model, quantizers, wbits, groupsize):
     pass
 
+def load_quant_custom(model, quantizers, wbits, groupsize):
+    pass
+
+def assert_parameters(model, model_custom):
+    is_weight = re.compile(r'^linear\d+.weight$')
+    weights, bias = {}, {}
+    for name, param in model.named_parameters():
+        if is_weight.match(name):
+            weights[name] = param
+        else:
+            bias[name] = param
+
+    for i, (name, param) in enumerate(weights.items()):
+        assert torch.allclose(param, model_custom.state_dict()[f"linear{i}_w"])
+
+    for i, (name, param) in enumerate(bias.items()):
+        assert torch.allclose(param, model_custom.state_dict()[f"linear{i}_b"])
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", action="store_true")
@@ -363,8 +381,7 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     train_loader, _, _ = MNISTloader(train_val_split=0.95).load()
 
-    #TODO: Why is training for ref and custom not the same
-    #TODO: Custom packing
+    #TODO: Do Custom packing
 
     ## ================== REFERENCE ==================
     if args.train:
