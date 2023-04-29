@@ -34,6 +34,16 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 
 **RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
 
+**Cool Community RWKV Projects**:
+
+https://github.com/saharNooby/rwkv.cpp INT4 INT8 FP16 FP32 inference for CPU using [ggml](https://github.com/ggerganov/ggml)
+
+https://github.com/harrisonvanderbyl/rwkv-cpp-cuda pure CUDA RWKV (no need for python & pytorch)
+
+https://github.com/Blealtan/RWKV-LM-LoRA LoRA fine-tuning
+
+More RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
+
 ChatRWKV v2: with "stream" and "split" strategies, and INT8. 3G VRAM is enough to run RWKV 14B :) https://github.com/BlinkDL/ChatRWKV/tree/main/v2
 ```python
 os.environ["RWKV_JIT_ON"] = '1'
@@ -62,16 +72,6 @@ When you build a RWKV chatbot, always check the text corresponding to the state,
 
 * There should not be any space after the final "Alice:". The generation result will have a space in the beginning, and you can simply strip it.
 * You can use \n in xxxxx, but avoid \n\n. So simply do ```xxxxx = xxxxx.strip().replace('\r\n','\n').replace('\n\n','\n')```
-
-Cool Community RWKV Projects:
-
-https://github.com/saharNooby/rwkv.cpp FP32, FP16 and quantized INT4 inference for CPU using [ggml](https://github.com/ggerganov/ggml)
-
-https://github.com/harrisonvanderbyl/rwkv-cpp-cuda pure CUDA RWKV (no need for python & pytorch)
-
-https://github.com/Blealtan/RWKV-LM-LoRA LoRA fine-tuning
-
-More RWKV projects: https://github.com/search?o=desc&q=rwkv&s=updated&type=Repositories
 
 The lastest "Raven"-series Alpaca-style-tuned RWKV 14B & 7B models are very good (almost ChatGPT-like, good at multiround chat too). Download: https://huggingface.co/BlinkDL/rwkv-4-raven
 
