@@ -31,6 +31,8 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 
 **RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
 
+Easier-to-understand inference: https://github.com/BlinkDL/ChatRWKV/blob/main/src/model_run.py
+
 **Cool Community RWKV Projects**:
 
 https://github.com/saharNooby/rwkv.cpp INT4 INT8 FP16 FP32 inference for CPU using [ggml](https://github.com/ggerganov/ggml)
