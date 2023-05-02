@@ -49,7 +49,6 @@ def quantize_gptq(model, train_loader):
     quantizers = {}
     layers = list(model.modules())[1:]
     layers = [l for l in layers if isinstance(l, nn.Linear)]
-    layers = layers[:-1]
     is_last_layer = lambda x: x == (len(layers) - 1)
 
     nsamples = len(train_loader.dataset)
@@ -60,54 +59,50 @@ def quantize_gptq(model, train_loader):
         inps[i*batch_size:(i+1)*batch_size] = inp.view(-1, 32*32)
     outs = torch.zeros_like(inps)
     
-
     for layer_id in range(len(layers)):
-        layer = layers[layer_id]
-
-        subset = find_layers(layer)
-        gptq = {}
-
-        for name in subset:
-            gptq[name] = GPTQ(subset[name], name)
-            gptq[name].quantizer = Quantizer()
-            gptq[name].quantizer.configure(bits=WBITS, perchannel=True, sym=True, mse=False, trits=False)
-
-        def add_batch(name):
-            def tmp(_, inp, out):
-                gptq[name].add_batch(inp[0].data, out.data)
-            return tmp
         
-        handles = []
-        
-        for name in subset:
-            handles.append(subset[name].register_forward_hook(add_batch(name)))
-
-        for i in range(nsamples):
-            if not is_last_layer(layer_id):
-                outs[i] = layer(inps[i])
-            else:
-                _ = layer(inps[i])
-
-        for h in handles: h.remove()
-
-        for name in subset:
-            print(i, name)
-            print('Quantizing ...')
-            scale,zero,g_idx = gptq[name].fasterquant(percdamp=0.01, groupsize=GROUPSIZE, actorder=False)
-            quantizers[f"linear{layer_id + 1}"] = (gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
-            gptq[name].free()
-
-        for i in range(nsamples):
-            if not is_last_layer(layer_id):
-                outs[i] = layer(inps[i])
-            else:
-                _ = layer(inps[i])
-                
-        del layer
-        del gptq 
-        torch.cuda.empty_cache()
-
         if not is_last_layer(layer_id):
+
+            layer = layers[layer_id]
+            
+            subset = find_layers(layer)
+            gptq = {}
+
+            print(f"Quantizing layer {layer_id} ...")
+            for name in subset:
+                gptq[name] = GPTQ(subset[name], name)
+                gptq[name].quantizer = Quantizer()
+                gptq[name].quantizer.configure(bits=WBITS, perchannel=True, sym=False, mse=False, trits=False)
+
+            def add_batch(name):
+                def tmp(_, inp, out):
+                    gptq[name].add_batch(inp[0].data, out.data)
+                return tmp
+            
+            handles = []
+            
+            for name in subset:
+                handles.append(subset[name].register_forward_hook(add_batch(name)))
+
+            for i in range(nsamples):
+                outs[i] = layer(inps[i])
+
+            for h in handles: h.remove()
+            
+            for name in subset:
+                print(i, name)
+                print('Quantizing ...')
+                scale,zero,g_idx = gptq[name].fasterquant(percdamp=0.01, groupsize=GROUPSIZE, actorder=False)
+                quantizers[f"linear{layer_id + 1}"] = (gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
+                gptq[name].free()
+
+            for i in range(nsamples):
+                outs[i] = layer(inps[i])
+
+            del layer
+            del gptq 
+            torch.cuda.empty_cache()
+
             inps, outs = outs, inps
     
     return quantizers
@@ -132,7 +127,6 @@ class GPTQ_CUSTOM(SimpleNet_V2):
             self.deactivate_add_batch_call = False
 
         def add_batch(self, inp):
-            
             # After calling fasterquant, we don't want to call add_batch anymore
             if self.deactivate_add_batch_call:
                 return
@@ -140,14 +134,10 @@ class GPTQ_CUSTOM(SimpleNet_V2):
             if len(inp.shape) == 2:
                 inp = inp.unsqueeze(0)
             
-            #TODO: is the case with len = 1 still necessary ?
-            tmp = 1 if len(inp.shape) == 1 else inp.shape[0]
+            tmp = inp.shape[0]
 
             # Assume weight come from nn.Linear
-            if len(inp.shape) == 3:
-                inp = inp.reshape((-1, inp.shape[-1]))
             inp = inp.t()
-
             self.H *= self.nsamples / (self.nsamples + tmp)
             self.nsamples += tmp
             inp = math.sqrt(2 / self.nsamples) * inp.float()
@@ -155,8 +145,9 @@ class GPTQ_CUSTOM(SimpleNet_V2):
 
         def fasterquant(self, blocksize=128, percdamp=.01, groupsize=-1, actorder=False):
             W = self.weight.data.clone()
-            # Need to transpose here, same reason as in __init__ with self.columns
-            W = W.t()
+            # OLD: Need to transpose here, same reason as in __init__ with self.columns
+            # UPDATE: no need to tranpose as we already transpose in my_linear()
+            # W = W.t()
             W = W.float()
 
             tick = time.time()
@@ -166,6 +157,7 @@ class GPTQ_CUSTOM(SimpleNet_V2):
 
             H = self.H
             del self.H
+
             dead = torch.diag(H) == 0
             H[dead, dead] = 1
             W[:, dead] = 0
@@ -242,9 +234,6 @@ class GPTQ_CUSTOM(SimpleNet_V2):
                 Q = Q[:, invperm]
                 g_idx = g_idx[invperm]
 
-            #TODO: Do we have to uncomment it ?
-            # if isinstance(self.layer, transformers.Conv1D):
-            #   Q = Q.t()
             self.weight.data = Q.reshape(self.weight.shape).to(self.weight.data.dtype)
            
             if scale == []:
@@ -267,9 +256,10 @@ class GPTQ_CUSTOM(SimpleNet_V2):
             return {}
         # Keep only layer within block layer_id
         is_weight = re.compile(f'^linear{layer_id}_w$')
-        for name in self.w.keys():                
-            if is_weight.match(name):                
-                self.subset[name] = self.w[name]
+
+        for name in dir(self):
+            if is_weight.match(name):
+                self.subset[name] = getattr(self, name)
         return self.subset
         
     def alloc_gptq(self, layer_id):
@@ -277,7 +267,7 @@ class GPTQ_CUSTOM(SimpleNet_V2):
         self.gptq = {}
 
         self.subset = self._fill_subset(layer_id)
-        
+
         for name in self.subset:
             self.gptq[name] = self.GPTQ(self.subset[name], name)
             self.gptq[name].quantizer = Quantizer()
@@ -299,7 +289,8 @@ class GPTQ_CUSTOM(SimpleNet_V2):
 
     ## Begin SimpleNet_V2
     def my_linear(self, x, weight, bias):
-        out = x @ weight.weight + bias
+        # out = x @ weight.weight.T + bias # Use version below as it is more stable
+        out = F.linear(x, weight.weight, bias)
         weight.add_batch(x)
         return out
 
@@ -308,6 +299,7 @@ class GPTQ_CUSTOM(SimpleNet_V2):
             x = x.view(x.size(0), -1)
         
         residual = x
+        #TODO: maybe we would need to transpose weight when building linear0_quant ?
         x = F.relu(self.linear0_quant(x))
         x = self.linear1_quant(x)
         x = F.relu(x) + residual
@@ -320,7 +312,6 @@ class GPTQ_CUSTOM(SimpleNet_V2):
 
 @torch.no_grad()
 def quantize_gptq_custom(model, train_loader):
-    
     nb_layers = model.nb_layers
     is_last_layer = lambda x: x == (nb_layers - 1)
 
@@ -333,40 +324,44 @@ def quantize_gptq_custom(model, train_loader):
     outs = torch.zeros_like(inps)
 
     quantizers = {}
-
+    
     for layer_id in range(nb_layers):
         
         if not is_last_layer(layer_id):
             
             print(f"Quantizing layer {layer_id} ...")
 
+            bias = getattr(model, f"linear{layer_id}_b")
+
             model.alloc_gptq(layer_id)
 
             for i in range(nsamples):
-                outs[i] = model.my_linear(inps[i], model.gptq[f"linear{layer_id}_w"], model.w[f"linear{layer_id}_b"])
-        
+                outs[i] = model.my_linear(inps[i], model.gptq[f"linear{layer_id}_w"], bias)
+
             model.gptq[f"linear{layer_id}_w"].deactivate_add_batch_call = True
 
             model.fasterquant(layer_id, quantizers)
 
             for i in range(nsamples):
-                outs[i] = model.my_linear(inps[i], model.gptq[f"linear{layer_id}_w"], model.w[f"linear{layer_id}_b"])
-
+                outs[i] = model.my_linear(inps[i], model.gptq[f"linear{layer_id}_w"], bias)
+            
+            setattr(model, f"linear{layer_id}_w", nn.Parameter(model.gptq[f"linear{layer_id}_w"].weight))
             model.free_gptq()
 
             inps, outs = outs, inps
-
+    
     return quantizers
 
 def model_pack_custom(model, quantizers, wbits, groupsize):
     # Extract weights and bias from model
-    is_weight = re.compile(r'^linear\d+_w$')
+    is_weight, is_bias = re.compile(r'^linear\d+_w$'), re.compile(r'^linear\d+_b$')
     weights, bias = OrderedDict(), OrderedDict()
-    for name, param in model.w.items():
-        if is_weight.match(name):
-            weights[name] = param
-        else:
-            bias[name] = param
+
+    for attr in dir(model):
+        if is_weight.match(attr):
+            weights[attr] = getattr(model, attr)
+        elif is_bias.match(attr):
+            bias[attr] = getattr(model, attr)
 
     make_quant_custom(model, quantizers, wbits, groupsize)
     qlayers = find_layers(model, [QuantLinear_custom])
@@ -383,13 +378,13 @@ def load_quant_custom(model, checkpoint, wbits, groupsize):
     print('Loading model ...')
     model = model.eval()
     # Extract weights and bias from model
-    is_weight = re.compile(r'^linear\d+_w$')
+    is_weight, is_bias = re.compile(r'^linear\d+_w$'), re.compile(r'^linear\d+_b$')
     weights, bias = OrderedDict(), OrderedDict()
-    for name, param in model.w.items():
-        if is_weight.match(name):
-            weights[name] = param
-        else:
-            bias[name] = param
+    for attr in dir(model):
+        if is_weight.match(attr):
+            weights[attr] = getattr(model, attr)
+        elif is_bias.match(attr):
+            bias[attr] = getattr(model, attr)
     
     # Create linear layer out of weights and bias
     layers = {}
@@ -441,10 +436,6 @@ if __name__ == "__main__":
     num_epochs = 5
     criterion = nn.CrossEntropyLoss()
     train_loader, _, _ = MNISTloader(train_val_split=0.95).load()
-
-    #TODO: Do custom eval gptq
-    #TODO: Is reference GPTQ quantizing bias as well ?
-    #TODO: Add seed everywhere in GPT for reproducibility
 
     ## ================== REFERENCE ==================
     if args.train:

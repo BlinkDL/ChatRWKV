@@ -148,16 +148,15 @@ def make_quant(module, names, bits, groupsize, name=''):
         make_quant(child, names, bits, groupsize, name + '.' + name1 if name != '' else name1)
 
 def make_quant_custom(module, names, bits, groupsize, name=''):
-    if isinstance(module, QuantLinear):
+    if isinstance(module, QuantLinear_custom):
         return
     for attr in dir(module):
         tmp = getattr(module, attr)
         name1 = name + '.' + attr if name != '' else attr
-        if name1 in names:
-            
-            bias_name = attr.replace('w', 'b')
+        if name1 in names:            
+            bias = getattr(module, attr.replace('w', 'b'))
             layer_name = attr.replace('w', 'quant')
-            setattr(module, layer_name, QuantLinear_custom(bits, groupsize, tmp.shape[0], tmp.shape[1], module.w[bias_name] is not None))
+            setattr(module, layer_name, QuantLinear_custom(bits, groupsize, tmp.shape[0], tmp.shape[1], bias is not None))
 
 
 class QuantLinear_custom(nn.Module):
@@ -203,7 +202,7 @@ class QuantLinear_custom(nn.Module):
             
         intweight = []
         for idx in range(self.infeatures):
-            intweight.append(torch.round((weight[:,idx] + scale_zeros[self.g_idx[idx]]) / self.scales[self.g_idx[idx]]).to(torch.int)[:,None])
+            intweight.append(torch.round((weight.data[:,idx] + scale_zeros[self.g_idx[idx]]) / self.scales[self.g_idx[idx]]).to(torch.int)[:,None])
         intweight = torch.cat(intweight,dim=1)
         intweight = intweight.t().contiguous()
         intweight = intweight.numpy().astype(np.uint32)

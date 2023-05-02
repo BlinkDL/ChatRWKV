@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
 import math
+import struct
 
 def seed_everything(seed: int):
     random.seed(seed)
@@ -39,7 +40,6 @@ class SimpleNet(nn.Module):
             x = x.view(x.size(0), -1)
 
         residual = x
-
         x = F.relu(self.linear1(x))
         x = self.linear2(x)
         x = F.relu(x) + residual
@@ -95,11 +95,7 @@ class SimpleNet_V2(nn.Module):
         self.linear3_b = nn.Parameter(torch.nn.init.uniform_(torch.empty(num_classes), -bound, bound))
 
         self.w = {}
-        self.nb_layers = 0
-        for i in range(0, 4):
-            self.w[f"linear{i}_w"] = getattr(self, f"linear{i}_w")
-            self.w[f"linear{i}_b"] = getattr(self, f"linear{i}_b")
-            self.nb_layers += 1
+        self.nb_layers = 4
 
     def my_linear(self, x, weight, bias):
         # return x @ weight.t() + bias.
@@ -252,3 +248,70 @@ def train(num_epochs, model, optimizer, criterion, train_loader, device):
 
         info = "Epoch: {:3}/{} \t train_loss: {:.3f} \t train_acc: {:.3f}"
         print(info.format(epoch + 1, num_epochs, train_loss, train_acc))
+
+def write_bin(filename, array):
+    from functools import reduce
+    # Force endianess: https://stackoverflow.com/questions/23831422/what-endianness-does-python-use-to-write-into-files
+    dtype_to_format = {
+        np.int8: 'i',
+        np.int16: 'i',
+        np.int32: 'i',
+        np.int64: 'i',
+        np.unsignedinteger: 'I',
+        np.float16: 'f',
+        np.float32: 'f',
+        np.float64: 'f',
+        np.double: 'd'
+    }
+    fmt = dtype_to_format[array.dtype.type]
+    shapes = [shape for shape in array.shape]
+    # n, c, h, w = array.shape
+    with open(filename, "wb") as f:
+        # number of dim
+        f.write(struct.pack('I', len(shapes)))
+        for shape in shapes:
+            f.write(struct.pack('I', shape))
+        f.write(struct.pack('c', bytes(fmt, 'utf-8')))
+        f.write(struct.pack(f"{fmt}"*(reduce(lambda x, y: x * y, shapes)), *array.flatten(order="C").tolist()))
+
+def read_bin(filename):
+    # https://qiita.com/madaikiteruyo/items/dadc99aa29f7eae0cdd0
+    format_to_byte = {
+        'c': 1,
+        'i': 4,
+        'I': 4,
+        'f': 4,
+        'd': 8
+    }
+
+    data = []
+    dims, fmt = None, None
+    with open(filename, "rb") as f:
+        # read row and col (np.int = 4 bytes)
+        byte = f.read(format_to_byte['i'])
+
+        if byte == b'':
+            raise Exception("read_bin: Empty binary")
+        else:
+            nb_dim = struct.unpack('I', byte)
+        
+        # Read dims
+        byte = f.read(nb_dim[0] * format_to_byte['I'])
+        dims = struct.unpack('I'*nb_dim[0], byte)
+        # Read character format
+        byte = f.read(1)
+        if byte == b'':
+            raise Exception("read_bin: Empty binary")
+        else:
+            fmt = chr(struct.unpack('c', byte)[0][0])
+
+        if len(fmt) != 1: raise Exception("read_bin: No format dumped in binary")
+        
+        while True:
+            byte = f.read(format_to_byte[fmt])
+            if byte == b'':
+                break
+            else:
+                data.append(struct.unpack(fmt, byte)[0])
+
+    return np.array(data).reshape(*dims)
