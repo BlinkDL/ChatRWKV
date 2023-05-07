@@ -4,7 +4,7 @@ import os
 import pathlib
 import tokenizers
 import random
-from rwkv.model import RWKV
+from myRWKV import RWKV
 
 from datasets import load_dataset
 

@@ -10,6 +10,8 @@ import tokenizers
 import torch
 from typing import List
 from rwkv.model import RWKV
+os.environ['RWKV_JIT_ON'] = '1'
+os.environ["RWKV_CUDA_ON"] = '0'
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Measure perplexity and per-token latency of an RWKV model on a given text file')
@@ -56,9 +58,10 @@ def format_loss_with_perplexity(loss: torch.Tensor) -> str:
 
 # ---
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-# device=torch.device('cpu')
+# device = torch.device('cpu')
 
-model = RWKV(model=args.model_path, strategy='cuda fp16i8')
+#TODO: Why is PERPLEXITY SO DAMN HIGH ?
+model = RWKV(model=args.model_path, strategy='cuda fp16')
 
 logits, state = None, None
 loss_sum: torch.Tensor = torch.tensor([0.0], device=device)
@@ -72,7 +75,7 @@ start: float = time.time()
 for i in range(run_count):
     token: int = test_tokens[i]
     target: int = test_tokens[i + 1]
-
+        
     logits, state = model.forward([token], None if i == 0 else state)
 
     if ignore_first_n_tokens == 0 or i + 1 >= ignore_first_n_tokens:
@@ -105,7 +108,7 @@ print()
 print(f'Average latency: {int((time.time() - start) * 1000 / run_count)} ms per token')
 
 print()
-print(f'Model: {os.path.basename(args.model_path)}, '
-      f'data: {os.path.basename(args.dataset_path)} with {token_count} tokens, '
-      f'Ignored first {ignore_first_n_tokens} tokens, '
+print(f'Model: {os.path.basename(args.model_path)}\n'
+      f'data: {os.path.basename(args.dataset_path)} with {token_count} tokens\n'
+      f'Ignored first {ignore_first_n_tokens} tokens\n'
       f'averages: {format_loss_with_perplexity(loss_sum / loss_count)}')

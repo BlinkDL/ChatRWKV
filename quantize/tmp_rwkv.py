@@ -1,5 +1,4 @@
-
-from rwkv.model import RWKV
+from myRWKV import RWKV
 from gptq.datautils import *
 from gptq.quant import Quantizer, quantize
 
@@ -9,6 +8,7 @@ from collections import OrderedDict
 import time
 import math
 import re
+from gptq.gptq import QuantLinear_custom 
 
 WBITS = 8
 GROUPSIZE = -1
@@ -155,23 +155,26 @@ class GPTQ_RWKV(RWKV):
     ### end GPTQ
 
     ### begin GPTQ_RWKV
-    def __init__(self, model, strategy):
-        super().__init__(model, strategy)
+    def __init__(self, checkpoint_path, strategy):
+        super().__init__(checkpoint_path, strategy)
         for i in range(self.args.n_layer):
             assert self.strategy[i].device == "cpu"
 
-    #TODO: Change to match my implem
     def _fill_subset(self, layer_id):
         # Keep only layer within block layer_id
-        is_weight = re.compile(f'^blocks\.{layer_id}\..*\.weight$')
+
+        #TODO: Uncomment me when quantizing 1 layer works
+        # is_weight = re.compile(f'^blocks\.{layer_id}\..*\.weight$')
+        is_weight = re.compile("blocks.0.att.key.weight")
         for name in self.w.keys():                
             if is_weight.match(name):
                 if len(self.w[name].shape) == 1: continue #TODO: Skip 1D tensors for now
                 self.subset[name] = self.w[name]
 
-        is_last_layer = (layer_id == self.args.n_layer - 1)
-        if is_last_layer:
-            self.subset["head.weight"] = self.w["head.weight"]
+        # TODO: Uncomment me when quantizing 1 layer works
+        # is_last_layer = (layer_id == self.args.n_layer - 1)
+        # if is_last_layer:
+        #     self.subset["head.weight"] = self.w["head.weight"]
         
         return self.subset
 
@@ -196,7 +199,7 @@ class GPTQ_RWKV(RWKV):
             print(layer_id, name)
             print('Quantizing ...')
             scale,zero,g_idx = self.gptq[name].fasterquant(percdamp=0.01, groupsize=GROUPSIZE, actorder=False)
-            quantizers[f"linear{layer_id}_w"] = (self.gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
+            quantizers[name] = (self.gptq[name].quantizer.cpu(), scale.cpu(), zero.cpu(), g_idx.cpu())
 
     ### end GPTQ_RWKV
 
@@ -208,12 +211,16 @@ class GPTQ_RWKV(RWKV):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw.weight)
-        rw.add_batch(rx)
+        # r = torch.sigmoid(rx @ rw.weight)
+        r = torch.sigmoid(rx @ rw)
+        # rw.add_batch(rx)
+
         k = (kx @ kw.weight).float()
         kw.add_batch(kx)
-        v = (vx @ vw.weight).float()
-        vw.add_batch(vx)
+
+        # v = (vx @ vw.weight).float()
+        v = (vx @ vw).float()
+        # vw.add_batch(vx)
 
         ww = t_first + k
         p = torch.maximum(pp, ww)
@@ -225,8 +232,9 @@ class GPTQ_RWKV(RWKV):
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
 
-        out = (r * wkv) @ ow.weight
-        ow.add_batch((r * wkv))
+        # out = (r * wkv) @ ow.weight
+        out = (r * wkv) @ ow
+        # ow.add_batch(r * wkv)
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
     
     def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
@@ -236,12 +244,14 @@ class GPTQ_RWKV(RWKV):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw.weight)
-        rw.add_batch(rx)
+        # r = torch.sigmoid(rx @ rw.weight)
+        r = torch.sigmoid(rx @ rw)
+        # rw.add_batch(rx)
         k = (kx @ kw.weight).float()
         kw.add_batch(kx)
-        v = (vx @ vw.weight).float()
-        vw.add_batch(vx)
+        # v = (vx @ vw.weight).float()
+        v = (vx @ vw).float()
+        # vw.add_batch(vx)
 
         T = x.shape[0]
         for t in range(T):
@@ -259,8 +269,9 @@ class GPTQ_RWKV(RWKV):
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-        out = (r * sx) @ ow.weight
-        ow.add_batch((r * sx))
+        # out = (r * sx) @ ow.weight
+        out = (r * sx) @ ow
+        # ow.add_batch(r * sx)
         return x + out, xx[-1,:], aa, bb, pp
 
     def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -268,12 +279,15 @@ class GPTQ_RWKV(RWKV):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw.weight)
-        rw.add_batch(rx)
-        vx = torch.square(torch.relu(kx @ kw.weight))
-        kw.add_batch(kx)
-        out = r * (vx @ vw.weight)
-        vw.add_batch(vx)
+        # r = torch.sigmoid(rx @ rw.weight)
+        r = torch.sigmoid(rx @ rw)
+        # rw.add_batch(rx)
+        # vx = torch.square(torch.relu(kx @ kw.weight))
+        vx = torch.square(torch.relu(kx @ kw))
+        # kw.add_batch(kx)
+        # out = r * (vx @ vw.weight)
+        out = r * (vx @ vw)
+        # vw.add_batch(vx)
         return x + out, xx
 
     def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -282,12 +296,15 @@ class GPTQ_RWKV(RWKV):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw.weight)
-        rw.add_batch(rx)
-        vx = torch.square(torch.relu(kx @ kw.weight))
-        kw.add_batch(kx)
-        out = r * (vx @ vw.weight)
-        vw.add_batch(vx)
+        # r = torch.sigmoid(rx @ rw.weight)
+        r = torch.sigmoid(rx @ rw)
+        # rw.add_batch(rx)
+        # vx = torch.square(torch.relu(kx @ kw.weight))
+        vx = torch.square(torch.relu(kx @ kw))
+        # kw.add_batch(kx)
+        # out = r * (vx @ vw.weight)
+        out = r * (vx @ vw)
+        # vw.add_batch(vx)
         return x + out, xx[-1,:]
 
     def forward_block(self, x, state, i, seq_mode, full_output=False):
@@ -326,9 +343,12 @@ class GPTQ_RWKV(RWKV):
             x = x.to(dtype=atype, device=dev)
 
             kw = self.gptq[f'{att}key.weight']
-            vw = self.gptq[f'{att}value.weight']
-            rw = self.gptq[f'{att}receptance.weight']
-            ow = self.gptq[f'{att}output.weight']
+            # vw = self.gptq[f'{att}value.weight']
+            vw = self.w[f'{att}value.weight']
+            # rw = self.gptq[f'{att}receptance.weight']
+            rw = self.w[f'{att}receptance.weight']
+            # ow = self.gptq[f'{att}output.weight']
+            ow = self.w[f'{att}output.weight']
 
             if dd.stream:
                 kw = kw.to(device=dev, non_blocking=True)
@@ -368,9 +388,12 @@ class GPTQ_RWKV(RWKV):
             if dd.stream:
                 del kw, vw, rw, ow
 
-            kw = self.gptq[f'{ffn}key.weight']
-            vw = self.gptq[f'{ffn}value.weight']
-            rw = self.gptq[f'{ffn}receptance.weight']
+            # kw = self.gptq[f'{ffn}key.weight']
+            kw = self.w[f'{ffn}key.weight']
+            # vw = self.gptq[f'{ffn}value.weight']
+            vw = self.w[f'{ffn}value.weight']
+            # rw = self.gptq[f'{ffn}receptance.weight']
+            rw = self.w[f'{ffn}receptance.weight']
 
             if dd.stream:
                 kw = kw.to(device=dev, non_blocking=True)
@@ -416,9 +439,10 @@ class GPTQ_RWKV(RWKV):
             x = F.layer_norm(x, (args.n_embd,), weight=self.w['ln_out.weight'], bias=self.w['ln_out.bias'])
 
             if self.w['head.weight'].dtype != torch.uint8:
-                x = x @ self.gptq['head.weight'].weight
-                self.gptq['head.weight'].add_batch(x)
-                self.gptq['head.weight'].deactivate_add_batch_call = True
+                x = x @ self.w['head.weight']
+                #TODO: uncommenbt me when quantizing 1 layer work
+                # x = x @ self.gptq['head.weight'].weight
+                # self.gptq['head.weight'].add_batch(x)
 
         return x.float()
     
@@ -434,7 +458,8 @@ def quantize_gptq_custom(model, tokens):
     outs = torch.zeros_like(inps)
     quantizers = {}
     
-    for layer_id in range(model.args.n_layer):
+    # for layer_id in range(model.args.n_layer):
+    for layer_id in range(1):
         
         print(f"Quantizing layer {layer_id} ...")
 
@@ -449,8 +474,6 @@ def quantize_gptq_custom(model, tokens):
 
         for gptq_layer in model.gptq.values():
             gptq_layer.deactivate_add_batch_call = True
-
-        tmp = model.w["blocks.0.att.key.weight"]
 
         model.fasterquant(layer_id, quantizers)
 
@@ -472,11 +495,50 @@ def quantize_gptq_custom(model, tokens):
 
     return quantizers
 
+def model_pack_custom(model, quantizers, wbits, groupsize):
+
+    weights = OrderedDict()
+
+    # is_weight = re.compile('^blocks\.\d+(\.[a-z]+[0-9]?)*\.weight$')
+    # for name in model.w.keys():                
+    #     if is_weight.match(name):
+    #         if len(model.w[name].shape) == 1: continue #TODO: Skip 1D tensors for now
+    #         weights[name] = model.w[name]
+    
+    for name in quantizers.keys():
+        if len(model.w[name].shape) == 1: continue
+        weights[name] = model.w[name]
+
+    #TODO: uncommenbt me when done
+    # weights["head.weight"] = model.w["head.weight"]
+
+    assert set(quantizers) - set(weights) == set(), "Quantizers and weights don't match"
+    assert set(weights) - set(quantizers) == set(), "Quantizers and weights don't match"
+
+    # Replace layer by QuantLinear
+    model.w_quant = {}
+    for key, value in model.w.items():
+        if key in quantizers.keys():
+            #FIXME: So far, we don't quantize ln0 et ln1 (which have bias) because 1d tensors
+            bias = None
+            model.w_quant[key] = QuantLinear_custom(wbits, groupsize, value.shape[0], value.shape[1], bias)
+
+    # Fill QuantLinear
+    print('Packing ...')
+    for key in model.w_quant.keys():
+        _, scale,zero,g_idx = quantizers[key]
+        bias = None
+        model.w_quant[key].pack(weights[key], bias, scale, zero, g_idx)
+    print('Done.')
+    return model
+
+
 if __name__ == "__main__":
 
+    model_ref = GPTQ_RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
     model = GPTQ_RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
 
-    NSAMPLES=2
+    NSAMPLES=1
     HIDDEN_SIZE=model.args.n_embd
     SEQLEN=1024 # cf https://huggingface.co/BlinkDL/rwkv-4-pile-169m
 
@@ -491,10 +553,26 @@ if __name__ == "__main__":
     tokens = torch.cat([inp for inp, _ in train_tokens], dim=0)
     tokens = torch.zeros((NSAMPLES, SEQLEN), dtype=torch.int64)
     print("tokens.shape", tokens.shape)
+    
+    quantizers = quantize_gptq_custom(model, tokens)
+    model = model_pack_custom(model, quantizers, WBITS, GROUPSIZE)
+    torch.save([model.w_quant, model.w], "1sample_quantized.pth")
+    
+    # Make sure only 1 layer was quantized
+    assert len(model.w_quant.keys()) == 1 and "blocks.0.att.key.weight" in model.w_quant.keys()
 
-    import pdb; pdb.set_trace()
-    # quantizers = quantize_gptq_custom(model, tokens)
+    for (ref_key, ref_value), (key, value) in zip(model_ref.w.items(), model.w.items()):
+        if key != "blocks.0.att.key.weight":
+            assert torch.allclose(ref_value, value, atol=1e-5)
+        else:
+            assert not torch.allclose(ref_value, value, atol=1e-5)
 
-    # model_pack_custom(model, quantizers, WBITS, GROUPSIZE)
-    # torch.save(model.state_dict(), "model_quantized_custom.pt")
-    # print("Done Custom GPTQ")
+    print("Done Custom GPTQ")
+
+    # I have noticed QuantLinear.forward() can be divded in 2 parts:
+    # 1. Quantize the weights (using info from model.w_quant thanks to QuantLinear.pack())
+    # 2. Perform x @ weights
+    # We can load checkpoint  RWKV of base class with model_w (which are quantized but doesnt have the scale, zero info)
+    # Then, if isinstancce(model, w_quant) exist, we load this dict as well
+    # Each time the weights are called, we do a trigger() by checking if isinstancce(moded.w_quant is QuantLinear) 
+    # This way, we can reuse RWKV base class with minimal change 
