@@ -117,6 +117,7 @@ model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
 pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
 END_OF_TEXT = 0
 END_OF_LINE = 187
+END_OF_LINE_DOUBLE = 535
 # pipeline = PIPELINE(model, "cl100k_base")
 # END_OF_TEXT = 100257
 # END_OF_LINE = 198
@@ -164,13 +165,19 @@ def load_all_stat(srv, name):
     model_tokens = copy.deepcopy(all_state[n]['token'])
     return all_state[n]['out']
 
+# Model only saw '\n\n' as [187, 187] before, but the tokenizer outputs [535] for it at the end
+def fix_tokens(tokens):
+    if len(tokens) > 0 and tokens[-1] == END_OF_LINE_DOUBLE:
+        tokens = tokens[:-1] + [END_OF_LINE, END_OF_LINE]
+    return tokens
+
 ########################################################################################################
 
 # Run inference
 print(f'\nRun prompt...')
 
 user, bot, interface, init_prompt = load_prompt(PROMPT_FILE)
-out = run_rnn(pipeline.encode(init_prompt))
+out = run_rnn(fix_tokens(pipeline.encode(init_prompt)))
 save_all_stat('', 'chat_init', out)
 gc.collect()
 torch.cuda.empty_cache()
@@ -219,7 +226,7 @@ def on_message(message):
         try:
             PROMPT_FILE = msg[8:].strip()
             user, bot, interface, init_prompt = load_prompt(PROMPT_FILE)
-            out = run_rnn(pipeline.encode(init_prompt))
+            out = run_rnn(fix_tokens(pipeline.encode(init_prompt)))
             save_all_stat(srv, 'chat', out)
             print("Prompt set up.")
             gc.collect()
