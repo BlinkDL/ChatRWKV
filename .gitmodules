@@ -1,0 +1,3 @@
+[submodule "demo/cpp-server"]
+	path = demo/cpp-server
+	url = https://github.com/ZeldaHuang/rwkv-cpp-server.git
