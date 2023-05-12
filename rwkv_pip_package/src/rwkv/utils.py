@@ -9,7 +9,7 @@ from torch.nn import functional as F
 
 
 def end_overlap(a, b):
-    for i in range(1, len(a) + 1):
+    for i in reversed(range(1, len(a) + 1)):
         if b.startswith(a[-i:]):
             return i
     return 0
