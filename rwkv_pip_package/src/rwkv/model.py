@@ -3,6 +3,7 @@
 ########################################################################################################
 
 import types, gc, os, time, re
+from typing import Union
 import torch
 from torch.nn import functional as F
 torch.backends.cudnn.benchmark = True
@@ -362,7 +363,7 @@ class RWKV(MyModule):
         r = torch.sigmoid(rx @ rw)
         vx = torch.square(torch.relu(kx @ kw))
         out = r * (vx @ vw)
-        return x + out, xx
+        return x + out, xx[0]
 
     @MyFunction
     def ffn_one_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -373,7 +374,7 @@ class RWKV(MyModule):
         r = torch.sigmoid(self.mm8_one(rx, rw, rmx, rrx, rmy, rry))
         vx = torch.square(torch.relu(self.mm8_one(kx, kw, kmx, krx, kmy, kry)))
         out = r * (self.mm8_one(vx, vw, vmx, vrx, vmy, vry))
-        return x + out, xx
+        return x + out, xx[0]
     
     ########################################################################################################
 
@@ -425,7 +426,13 @@ class RWKV(MyModule):
         e2 = torch.exp(k - p)
 
         out = (r * wkv) @ ow
-        return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
+                
+        s0 = xx.squeeze(0)
+        s1 = (e1 * aa + e2 * v).squeeze(0)
+        s2 = (e1 * bb + e2).squeeze(0)
+        s3 = (p).squeeze(0)
+        
+        return x+out, s0, s1, s2, s3
 
     @MyFunction
     def att_one_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
@@ -449,8 +456,12 @@ class RWKV(MyModule):
         e2 = torch.exp(k - p)
 
         out = self.mm8_one(r * wkv, ow, omx, orx, omy, ory)
-        return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
-
+        s0 = xx.squeeze(0)
+        s1 = (e1 * aa + e2 * v).squeeze(0)
+        s2 = (e1 * bb + e2).squeeze(0)
+        s3 = (p).squeeze(0)
+        
+        return x+out, s0, s1, s2, s3
     ########################################################################################################
 
     @MyFunction
@@ -554,10 +565,23 @@ class RWKV(MyModule):
 
     ########################################################################################################
 
-    def forward(self, tokens, state, full_output=False):
+    def forward(self, tokens: Union[list, torch.tensor], state, full_output=False):
+        """
+        tokens - if a list assumed to be a single sequence for backwards compatiability.
+                if a tensor assumed to be of shape (b x seq_len)
+        """
+
+        if is_list:= isinstance(tokens, list):
+            
+            tokens = torch.tensor(tokens)
+
+        if is_single:= len(tokens.shape)==1:
+            tokens = tokens.unsqueeze(1)
+
         with torch.no_grad():
             w = self.w
             args = self.args
+            batch_size, seq_len = tokens.shape
 
             if state == None:
                 state = [None] * args.n_layer * 5
@@ -565,15 +589,15 @@ class RWKV(MyModule):
                     dd = self.strategy[i]
                     dev = dd.device
                     atype = dd.atype
-                    state[i*5+0] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
-                    state[i*5+1] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
-                    state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
-                    state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous() - 1e30
-                    state[i*5+4] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
+                    state[i*5+0] = torch.zeros(batch_size, args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
+                    state[i*5+1] = torch.zeros(batch_size, args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
+                    state[i*5+2] = torch.zeros(batch_size, args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
+                    state[i*5+3] = torch.zeros(batch_size, args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous() - 1e30
+                    state[i*5+4] = torch.zeros(batch_size, args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
 
-            seq_mode = len(tokens) > 1
-
-            x = w['emb.weight'][tokens if seq_mode else tokens[0]]
+            seq_mode = seq_len > 1
+            tokens = tokens.transpose(0, 1) # seq_len x batch x features
+            x = w['emb.weight'][tokens]
 
             for i in range(args.n_layer):
                 bbb = f'blocks.{i}.'
@@ -670,16 +694,22 @@ class RWKV(MyModule):
                         x = x / 2
             
             dd = self.strategy[args.n_layer]
-            x = x[-1,:] if (seq_mode and (not full_output)) else x
+            x = x[-1] if (seq_mode and (not full_output)) else x
             x = x.to(dtype=dd.atype, device=dd.device)
             
             x = F.layer_norm(x, (args.n_embd,), weight=w['ln_out.weight'], bias=w['ln_out.bias'])
+            
             if w['head.weight'].dtype != torch.uint8:
                 x = x @ w['head.weight']
             else:
                 if seq_mode and full_output:
                     x = self.mm8_seq(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
                 else:
-                    x = self.mm8_one(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
-
+                    x = self.mm8_one(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry']) 
+            
+            if is_list:
+                x = x.squeeze(1)
+            if is_single:
+                x = x.squeeze(0)
+            
             return x.float(), state
