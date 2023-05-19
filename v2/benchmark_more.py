@@ -17,7 +17,8 @@ os.environ["RWKV_CUDA_ON"] = '0' # set to '1' for faster processing
 
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-1B5-v11-Eng99%-Other1%-20230425-ctx4096'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v11-Eng99%-Other1%-20230425-ctx4096'
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v11-Eng99%-Other1%-20230427-ctx8192'
+MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v11x-Eng99%-Other1%-20230429-ctx8192'
+# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v11x-Eng99%-Other1%-20230501-ctx8192'
 
 print(f'\nLoading ChatRWKV https://github.com/BlinkDL/ChatRWKV')
 import torch
@@ -54,7 +55,7 @@ If I eat 7,000 calories above my basal metabolic rate, how much weight do I gain
 What is the squareroot of 10000?
 '''.strip().split('\n')
 
-PAD_TOKENS = [] # [] or [0] or [187]
+PAD_TOKENS = [] # [] or [0] or [187] -> probably useful
 
 print(MODEL_NAME)
 for q in QUESTIONS:
@@ -71,9 +72,9 @@ for q in QUESTIONS:
         
         out, state = pipeline.model.forward(tokens, state)
         for n in occurrence:
-            out[n] -= (0.2 + occurrence[n] * 0.2)
+            out[n] -= (0.2 + occurrence[n] * 0.2) # repetition penalty
         
-        token = pipeline.sample_logits(out, temperature=1.0, top_p=0)
+        token = pipeline.sample_logits(out, temperature=1.0, top_p=0) # topp = 0 --> greedy decoding
         if token == 0: break # exit when 'endoftext'            
         
         out_tokens += [token]
@@ -85,6 +86,9 @@ for q in QUESTIONS:
             out_str += tmp
             out_last = i + 1
         
-        if '\n\n' in tmp: break # exit when '\n\n'
+        if '\n\n' in tmp: # exit when '\n\n'
+            out_str += tmp
+            out_str = out_str.strip()
+            break
 
     print('\n' + '=' * 50)

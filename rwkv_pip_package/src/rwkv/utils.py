@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import json, time, random, os
+import os, sys
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -24,6 +24,10 @@ class PIPELINE():
         if WORD_NAME == 'cl100k_base':
             import tiktoken
             self.tokenizer = tiktoken.get_encoding(WORD_NAME)
+        elif WORD_NAME == 'rwkv_vocab_v20230424':
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from rwkv_tokenizer import TRIE_TOKENIZER
+            self.tokenizer = TRIE_TOKENIZER(os.path.dirname(os.path.abspath(__file__)) + '/rwkv_vocab_v20230424.txt')        
         else:
             from tokenizers import Tokenizer
             self.tokenizer = Tokenizer.from_file(WORD_NAME)
@@ -39,10 +43,10 @@ class PIPELINE():
         return context
 
     def encode(self, x):
-        if 'tiktoken' in str(type(self.tokenizer)):
-            return self.tokenizer.encode(x)
-        else:
+        if 'Tokenizer' in str(type(self.tokenizer)):
             return self.tokenizer.encode(x).ids
+        else:
+            return self.tokenizer.encode(x)
     
     def decode(self, x):
         return self.tokenizer.decode(x)

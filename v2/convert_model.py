@@ -4,6 +4,7 @@ sys.path.append(f'{current_path}/../rwkv_pip_package/src')
 
 from rwkv.model import RWKV
 
+# NOTE: increase swap / virtual ram size when converting large models
 # python convert_model.py --in '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050' --out 'fp16_RWKV-4-Pile-14B-20230313-ctx8192-test1050' --strategy 'cuda fp16'
 # python convert_model.py --in '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096' --out 'fp16_RWKV-4-Pile-7B-20230109-ctx4096' --strategy 'cuda fp16'
 # python convert_model.py --in '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096' --out 'fp16i8_and_fp16_RWKV-4-Pile-3B-20221110-ctx4096' --strategy 'cuda fp16i8 *10 -> cuda fp16'
