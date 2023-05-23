@@ -1,114 +1,70 @@
-# Measures perplexity and per-token latency of an RWKV model on a given text file.
-# Perplexity is defined here as exp() of average cross-entropy loss.
-# Usage: python measure_perplexity.py RWKV-4-Pile-169M-20220807-8023.pth wikitext2 2048
-
-import os
-import time
-import pathlib
-import argparse
-import tokenizers
 import torch
-from typing import List
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from datasets import load_dataset
+# from myRWKV import RWKV
 from rwkv.model import RWKV
-os.environ['RWKV_JIT_ON'] = '1'
-os.environ["RWKV_CUDA_ON"] = '0'
+import torch.nn as nn
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Measure perplexity and per-token latency of an RWKV model on a given text file')
-    parser.add_argument('model_path', help='Path to model checkpoint file')
-    parser.add_argument('dataset_path', type=str, choices=['wikitext2', 'ptb', 'c4'], help='Where to extract calibration data from.')
-    parser.add_argument('nsamples', help='How many samples', type=int, default=4096)
-    return parser.parse_args()
+device = "cpu"
 
-args = parse_args()
+# Model
+model = RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
+# Dataset
+tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-4-169m-pile")
+# sentence = "My name is Bob"
+# encodings = tokenizer("\n\n".join(sentence), return_tensors='pt')
+# ctx_len = 5
+# stride = ctx_len // 2
+# seq_len = encodings.input_ids.size(1)
 
-def get_wikitext2(nsamples):
-    from datasets import load_dataset
-    testdata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
+test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-4-169m-pile")
+encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
+ctx_len = 1024
+stride = ctx_len // 2
+seq_len = encodings.input_ids.size(1)
 
-    print('Loading 20B tokenizer (RWKV)')
-    tokenizer_path: pathlib.Path = pathlib.Path(os.path.abspath(__file__)).parent / '20B_tokenizer.json'
-    tokenizer: tokenizers.Tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_path))
-
-    print('Loading text')
-    test_text: str = "\n\n".join(testdata['text'])
-    test_tokens = torch.tensor(tokenizer.encode(test_text).ids, dtype=torch.long)
-    print(f'{len(test_tokens)} test tokens in the text')
-
-    import random
-    random.seed(42)
-    # Randomly select a sample of nsamples tokens
-    i = random.randint(0, len(test_tokens) - nsamples)    
-    return tokenizer, test_tokens[i:i+nsamples]
-
-def get_loaders(dataset_path, nsamples):
-    if 'wikitext2' in dataset_path: 
-        return get_wikitext2(nsamples)
-    else:
-        # https://github.com/IST-DASLab/gptq/blob/main/datautils.py
-        raise NotImplementedError("Only wikitext2 is supported for now")
-
-tokenizer, test_tokens = get_loaders(args.dataset_path, args.nsamples)
-
-def format_loss(loss: torch.Tensor) -> str:
-    return str(['%.3f' % (loss[i].item(),) for i in range(len(loss))]).replace('\'', '')[1:-1]
-
-def format_loss_with_perplexity(loss: torch.Tensor) -> str:
-    return f'loss [{format_loss(loss)}], perplexity {"%.3f" % (torch.exp(loss[0]).item(),)}'
-
-# ---
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-# device = torch.device('cpu')
-
-#TODO: Why is PERPLEXITY SO DAMN HIGH ?
-model = RWKV(model=args.model_path, strategy='cuda fp16')
-
+nlls = []
+prev_end_loc = 0
 logits, state = None, None
-loss_sum: torch.Tensor = torch.tensor([0.0], device=device)
-loss_count: int = 0
-token_count = len(test_tokens)
-run_count = token_count - 1
-# Ignore 20% of the tokens to let the model warmup
-ignore_first_n_tokens = int(token_count * 0.2)
-start: float = time.time()
+loss_fct = nn.CrossEntropyLoss()
 
-for i in range(run_count):
-    token: int = test_tokens[i]
-    target: int = test_tokens[i + 1]
-        
-    logits, state = model.forward([token], None if i == 0 else state)
+# for begin_loc in tqdm(range(0, seq_len, stride)):
+for begin_loc in tqdm(range(0, stride * 3, stride)):
+    end_loc = min(begin_loc + ctx_len, seq_len)
+    trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
+    input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
+    target_ids = input_ids.clone()
+    target_ids[:, :-trg_len] = -100
+    
+    full_logits = torch.zeros((input_ids.size(1), model.w["emb.weight"].shape[0])) 
 
-    if ignore_first_n_tokens == 0 or i + 1 >= ignore_first_n_tokens:
-        losses = torch.tensor([
-            torch.nn.functional.cross_entropy(logits, torch.tensor(target, dtype=torch.long, device=device), reduction='none').item()
-        ]
-        , device=device)
+    with torch.no_grad():
+        for i in range(input_ids.size(1)):
+            logits, state = model.forward([input_ids[0, i]], state)
+            full_logits[i, :] = logits
+     
+        # loss is calculated using CrossEntropyLoss which averages over valid labels
+        # N.B. the model only calculates loss over trg_len - 1 labels, because it internally shifts the labels
+        # to the left by 1.
+        labels = target_ids
+        labels = labels.to(full_logits.device)
+        # Shift so that tokens < n predict n
+        shift_logits = full_logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+        # Flatten the tokens
+        neg_log_likelihood = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        loss_sum += losses
-        loss_count += 1
+        nlls.append(neg_log_likelihood)
 
-    if i % 100 == 0:
-        avg_loss_so_far = loss_sum / loss_count
+    prev_end_loc = end_loc
+    if end_loc == seq_len:
+        break
 
-        duration: float = time.time() - start
-        duration_per_token: float = duration / (i + 1)
-        runs_remaining: int = run_count - i - 1
-        duration_remaining: int = int(runs_remaining * duration_per_token)
-
-        print(f'Token #{i}/{token_count}, '
-              f'{int(100.0 * i / token_count)}%, '
-              f'ETA {duration_remaining // 60} m {duration_remaining % 60} s', end='')
-
-        if loss_count > 0:
-            print(f', averages so far: {format_loss_with_perplexity(avg_loss_so_far)}')
-        else:
-            print()
-
-print()
-print(f'Average latency: {int((time.time() - start) * 1000 / run_count)} ms per token')
-
-print()
-print(f'Model: {os.path.basename(args.model_path)}\n'
-      f'data: {os.path.basename(args.dataset_path)} with {token_count} tokens\n'
-      f'Ignored first {ignore_first_n_tokens} tokens\n'
-      f'averages: {format_loss_with_perplexity(loss_sum / loss_count)}')
+print(f"nlls: {torch.stack(nlls)}")
+mean_nll = torch.stack(nlls).mean()
+if mean_nll.is_cuda:
+    mean_nll = mean_nll.cpu().float()
+ppl = torch.exp(mean_nll)
+print(f"Perplexity: {ppl}")
