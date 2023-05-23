@@ -18,6 +18,8 @@ args = types.SimpleNamespace()
 print('\n\nChatRWKV v2 https://github.com/BlinkDL/ChatRWKV')
 
 import torch
+import pandas as pd
+import random
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -189,7 +191,7 @@ for s in srv_list:
 def reply_msg(msg):
     print(f'{bot}{interface} {msg}\n')
 
-def on_message(message):
+def on_message(message,FREE_GEN_LEN=256):
     global model_tokens, model_state, user, bot, interface, init_prompt
 
     srv = 'dummy_server'
@@ -451,20 +453,21 @@ print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='
 
 ########################################################################################################
 
-ctx = '''\bYou are the DM for a game that's a cross between Dungeons and Dragons and a choose-your-own-adventure game. You will be given an action and a sentence about how that action goes. You will send me an immersive and detailed response describing how the action went for [char].
+ctx = '''\nYou are the DM for a game that's a cross between Dungeons and Dragons and a choose-your-own-adventure game. You will be given an action and a sentence about how that action goes. You will send me an immersive and detailed response describing how the action went for [char].
 ### Input:'''
 
 delim = '##########'
 
 die=pd.read_csv('/root/foreverDM/newRollingTable.csv',index_col=None)
-r=random.randint(0,19)
-roll=die['sentence'][r]
+
 
 while True:
-    msg = prompt(f'{delim}{ctx}{user}{interface} ')
-    result = f'\nresult: {roll}'
+    r=random.randint(0,19)
+    roll=die['sentence'][r]
+    msg = prompt(f'{user}{interface}{ctx} ')
+    result = f'result: {roll}'
     print(result)
     if len(msg.strip()) > 0:
-        on_message(msg + result)
+        on_message(msg + result,FREE_GEN_LEN = 100)
     else:
         print('Error: please say something')
