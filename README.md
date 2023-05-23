@@ -33,6 +33,10 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 
 **Building your own RWKV inference engine:** begin with https://github.com/BlinkDL/ChatRWKV/blob/main/src/model_run.py which is easier to understand (used by https://github.com/BlinkDL/ChatRWKV/blob/main/chat.py).
 
+**RWKV preprint** https://arxiv.org/abs/2305.13048
+
+![RWKV-paper](RWKV-paper.png)
+
 **Cool Community RWKV Projects**:
 
 https://github.com/saharNooby/rwkv.cpp INT4 INT8 FP16 FP32 inference for CPU using [ggml](https://github.com/ggerganov/ggml)
