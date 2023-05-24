@@ -9,7 +9,7 @@ ins = '''You are the DM for a game that's a cross between Dungeons and Dragons a
 ### Input:'''
 # srv = 'dummy_server'
 delim = '##########'
-GUILD_ID = 'MTA5Nzk2ODA1OTA3NzA5OTU1MA.GrchrB.DNQ63eF5r5BbaHYGac7De6g2nEd9TtkNhijK68'
+TOKEN = os.getenv(TOKEN)
 
 die=pd.read_csv('/root/foreverDM/newRollingTable.csv',index_col=None)
 
@@ -48,4 +48,4 @@ async def dm(ctx: interactions.SlashContext,msg:str):
     # await ctx.send(f"You input {msg}")
 
 client.change_presence('online')
-client.start("MTA5Nzk2ODA1OTA3NzA5OTU1MA.GcX-6l.GiGkiaL7creZvi-VYQLAK2N2nZk2c6Lm85I_18")
+client.start(TOKEN)
