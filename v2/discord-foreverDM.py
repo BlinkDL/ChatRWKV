@@ -12,7 +12,7 @@ load_dotenv()
 nest_asyncio.apply()
 
 
-ins = '''\nYou are the DM for a game that's a cross between Dungeons and Dragons and a choose-your-own-adventure game. You will be given an action and a sentence about how that action goes. You will send me an immersive and detailed response describing how the action went for [char].
+ins = '''\n\n###Instruction You are the DM for a game that's a cross between Dungeons and Dragons and a choose-your-own-adventure game. You will be given an action and a sentence about how that action goes. You will send me an immersive and detailed response describing how the action went for [char].
 ### Input:'''
 # srv = 'dummy_server'
 delim = '##########'
@@ -49,14 +49,16 @@ async def dm(ctx: interactions.SlashContext,msg:str):
     except: #new user
       out = load_all_stat('', 'chat_init')
       save_all_stat(srv, 'chat', out)
-    output = on_message(msg,srv,FREE_GEN_LEN = 100)
+    # output = on_message(msg,srv,FREE_GEN_LEN = 100)
     if '+' in msg:
+      print('command')
       output = on_message(msg,srv,FREE_GEN_LEN = 100)
       if output is None:
         output = 'Chat reset!'
       await ctx.send(f"**Input**: {OGmsg}\n**Response**: {output}")
     else:
-      msg = f'{ins}{user}{interface}{msg}'
+      print('game')
+      msg = f'{user}{interface}{msg}{result}'
       output = on_message(msg,srv,FREE_GEN_LEN = 100)
       await ctx.send(f"Action: {OGmsg}\n**Dice: {die['die'][r]}**\n{output}")
 # await ctx.send(f"You input {msg}")

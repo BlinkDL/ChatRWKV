@@ -184,7 +184,8 @@ def fix_tokens(tokens):
 print(f'\nRun prompt...')
 
 user, bot, interface, init_prompt = load_prompt(PROMPT_FILE)
-out = run_rnn(fix_tokens(pipeline.encode(init_prompt)))
+shortPrompt = '''\n\n###Instruction: You are the DM for a game that's a cross between Dungeons and Dragons and a choose-your-own-adventure game. You will be given an action and a sentence about how that action goes. You will send me an immersive and detailed response describing how the action went for the given character.'''
+out = run_rnn(fix_tokens(pipeline.encode(shortPrompt)))
 save_all_stat('', 'chat_init', out)
 gc.collect()
 torch.cuda.empty_cache()
@@ -192,8 +193,8 @@ srv = 'dummy_server'
 srv_list = [srv]
 for s in srv_list:
     save_all_stat(s, 'chat', out)
-def reply_msg(msg):
-    print(f'{bot}{interface} {msg}\n')
+# def reply_msg(msg):
+#     print(f'{bot}{interface} {msg}\n')
 
 def on_message(message,srv,FREE_GEN_LEN=256):
     global model_tokens, model_state, user, bot, interface, init_prompt, tokenString
@@ -219,7 +220,7 @@ def on_message(message,srv,FREE_GEN_LEN=256):
     if msg == '+reset':
         out = load_all_stat('', 'chat_init')
         save_all_stat(srv, 'chat', out)
-        reply_msg("Chat reset.")
+        # reply_msg("Chat reset.")
         return
     
     # use '+prompt {path}' to load a new prompt
@@ -364,7 +365,7 @@ Below is an instruction that describes a task. Write a response that appropriate
             if '+' in msg:
               new = f"{msg}\n\n{bot}{interface}"            
             else:                        
-              new = f"{user}{interface} {msg}\n\n{bot}{interface}"
+              new = f"{user}{interface} {msg}\n"#\n{bot}{interface}"
             # print(f'### add ###\n[{new}]')
             out = run_rnn(pipeline.encode(new,verbose=True), newline_adj=-999999999)
             save_all_stat(srv, 'chat_pre', out)
