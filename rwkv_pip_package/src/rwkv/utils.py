@@ -42,10 +42,14 @@ class PIPELINE():
             context = '\n'
         return context
 
-    def encode(self, x):
+    def encode(self, x,verbose=False):
         if 'Tokenizer' in str(type(self.tokenizer)):
+            if verbose:
+                print(x)
             return self.tokenizer.encode(x).ids
         else:
+            if verbose:
+                print(x)
             return self.tokenizer.encode(x)
     
     def decode(self, x):
