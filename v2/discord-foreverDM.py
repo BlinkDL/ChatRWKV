@@ -1,4 +1,4 @@
-from chat_foreverDM import user, bot, interface, on_message, out, srv, FREE_GEN_LEN, pipeline, load_all_stat, save_all_stat, GEN_TEMP, GEN_TOP_P, END_OF_TEXT, run_rnn, GEN_alpha_presence, GEN_alpha_frequency
+from chatForeverDM import user, bot, interface, on_message, out, srv, FREE_GEN_LEN, pipeline, load_all_stat, save_all_stat, GEN_TEMP, GEN_TOP_P, END_OF_TEXT, run_rnn, GEN_alpha_presence, GEN_alpha_frequency
 import pandas as pd
 import random
 import nest_asyncio
@@ -36,14 +36,10 @@ async def on_ready():
     opt_type=interactions.OptionType.STRING,
     required=True)
 async def dm(ctx: interactions.SlashContext,msg:str):
+    OGmsg = msg 
     global tokenString
     await ctx.defer()
-    srv = str(ctx.author.username)
-
-    r=random.randint(0,19)
-    roll=die['sentence'][r]
-    OGmsg = msg
-    result = f'\nresult: {roll}'
+    srv = str(ctx.author.username)   
     try:
       out = load_all_stat(srv, 'chat')
     except: #new user
@@ -55,12 +51,16 @@ async def dm(ctx: interactions.SlashContext,msg:str):
       output = on_message(msg,srv,FREE_GEN_LEN = 100)
       if output is None:
         output = 'Chat reset!'
-      await ctx.send(f"**Input**: {OGmsg}\n**Response**: {output}")
+      await ctx.send(f"**Input**: {OGmsg}\n**Response**: {output.replace('#','')}")
     else:
       print('game')
-      msg = f'{user}{interface}{msg}{result}'
+      r=random.randint(0,19)
+      roll=die['sentence'][r]
+      
+      result = f'\nresult: {roll}'
+      msg = f'{msg}{result}'
       output = on_message(msg,srv,FREE_GEN_LEN = 100)
-      await ctx.send(f"Action: {OGmsg}\n**Dice: {die['die'][r]}**\n{output}")
+      await ctx.send(f"Action: {OGmsg}\n**Dice: {die['die'][r]}**\n{output.replace('#','')}")
 # await ctx.send(f"You input {msg}")
 
 client.start(TOKEN)
