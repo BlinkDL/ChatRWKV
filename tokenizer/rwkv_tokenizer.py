@@ -214,11 +214,85 @@ class TRIE_TOKENIZER():
         print()
 
 ########################################################################################################
+# Tokenizer #4 (fast) https://github.com/LoganDark
+########################################################################################################
+
+from ast import literal_eval
+
+class FastTokenizer:
+    __slots__ = ('tok2val', 'tok2len', 'root')
+
+    def __init__(self, file_name):
+        self.tok2val = [b''] * 65536
+        self.tok2len = [0] * 65536
+        self.root = [None] * 256
+
+        with open(file_name, 'rt', encoding = 'utf-8') as file:
+            for line in file:
+                token, value = line.rstrip().split(' ', 1)
+                value, expected_len = value.rsplit(' ', 1)
+                value = literal_eval(value)
+                if isinstance(value, str): value = value.encode('utf-8')
+                token, value, expected_len = int(token), value, int(expected_len)
+                assert len(value) == expected_len
+                self.add_token(token, value)
+
+    def add_token(self, token: int, value: bytes):
+        self.tok2val[token] = value
+        self.tok2len[token] = len(value)
+
+        pos = self.root
+
+        for byte in value[:-1]:
+            if pos[byte] is None:
+                pos[byte] = (None, [None] * 256)
+            pos = pos[byte][1]
+
+        if pos[value[-1]] is None:
+            pos[value[-1]] = (token, [None] * 256)
+
+    def next_token(self, src: bytes) -> int:
+        last_token, last = None, self.root
+        for i in range(0, len(src)):
+            if current := last[src[i]]:
+                if token := current[0]: last_token = token
+                last = current[1]
+            else:
+                break
+        return last_token
+
+    def encode_bytes(self, src: bytes) -> list[int]:
+        start, stop = 0, len(src)
+        while start < stop:
+            last_token, last = None, self.root
+
+            for i in range(start, stop):
+                if current := last[src[i]]:
+                    if token := current[0]:
+                        last_token = token
+                        start = i + 1
+                    last = current[1]
+                else: break
+
+            if last_token: yield last_token
+            else: break
+
+    def decode_bytes(self, tokens: list[int]) -> bytes:
+        return b''.join(map(self.tok2val.__getitem__, tokens))
+
+    def encode(self, src: str) -> list[int]:
+        return self.encode_bytes(src.encode('utf-8'))
+
+    def decode(self, tokens: list[int]) -> str:
+        return self.decode_bytes(tokens).decode('utf-8')
+
+########################################################################################################
 # Demo
 ########################################################################################################
 
 TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230424.txt')
 TRIE_TEST = TRIE_TOKENIZER('rwkv_vocab_v20230424.txt')
+FAST_TEST = FastTokenizer('rwkv_vocab_v20230424.txt')
 
 src = '''起業家イーロン・マスク氏が創業した宇宙開発企業「スペースX（エックス）」の巨大新型ロケット「スターシップ」が20日朝、初めて打ち上げられたが、爆発した。
 打ち上げは米テキサス州の東海岸で行われた。無人の試験で、負傷者はいなかった。
@@ -249,20 +323,21 @@ print(f'Benchmark {src_len} tokens...')
 def benchmark(XXX):
     min_t = 1e100
     for i in range(5):
-        t_begin = time.time_ns()
-        tokens = XXX.encode(src)
+        t_begin = time.time_ns() - 1
+        tokens = list(XXX.encode(src))
         min_t = min(time.time_ns() - t_begin, min_t)
     print('Encode', round(src_len / min_t * 1e3, 3), 'MB/s')
 
     min_t = 1e100
     for i in range(10):
-        t_begin = time.time_ns()
+        t_begin = time.time_ns() - 1
         sss = XXX.decode(tokens)
         min_t = min(time.time_ns() - t_begin, min_t)
     print('Decode', round(src_len / min_t * 1e3, 3), 'MB/s')
 
 benchmark(TOKENIZER)
 benchmark(TRIE_TEST)
+benchmark(FAST_TEST)
 
 ########################################################################################################
 # Unit Test
@@ -1003,12 +1078,14 @@ Gullah: (NEEDED)
 Lojban: mi kakne le nu citka le blaci .iku'i le se go'i na xrani mi
 Nórdicg: Ljœr ye caudran créneþ ý jor cẃran.
 ''']
-        
+
 for q in QQQ:
     tokens = TOKENIZER.encode(q)
     if q != TOKENIZER.decode(tokens):
         print('ERROR', q)
     if str(tokens) != str(TRIE_TEST.encode(q)):
+        print('ERROR', q)
+    if str(tokens) != str(list(FAST_TEST.encode(q))):
         print('ERROR', q)
 
 print('All OK\n')
