@@ -225,7 +225,7 @@ class FastTokenizer:
     def __init__(self, file_name):
         self.tok2val = [b''] * 65536
         self.tok2len = [0] * 65536
-        self.root = [None] * 256
+        self.root = {}
 
         with open(file_name, 'rt', encoding = 'utf-8') as file:
             for line in file:
@@ -242,19 +242,13 @@ class FastTokenizer:
         self.tok2len[token] = len(value)
 
         pos = self.root
-
-        for byte in value[:-1]:
-            if pos[byte] is None:
-                pos[byte] = (None, [None] * 256)
-            pos = pos[byte][1]
-
-        if pos[value[-1]] is None:
-            pos[value[-1]] = (token, [None] * 256)
+        for byte in value[:-1]: pos = pos.setdefault(byte, (None, {}))[1]
+        pos.setdefault(value[-1], (token, {}))
 
     def next_token(self, src: bytes) -> int:
         last_token, last = None, self.root
         for i in range(0, len(src)):
-            if current := last[src[i]]:
+            if current := last.get(src[i]):
                 if token := current[0]: last_token = token
                 last = current[1]
             else:
@@ -267,7 +261,7 @@ class FastTokenizer:
             last_token, last = None, self.root
 
             for i in range(start, stop):
-                if current := last[src[i]]:
+                if current := last.get(src[i]):
                     if token := current[0]:
                         last_token = token
                         start = i + 1
