@@ -243,14 +243,13 @@ class FastTokenizer:
         for byte in value[:-1]: pos = pos.setdefault(byte, (None, {}))[1]
         pos.setdefault(value[-1], (token, {}))
 
-    def next_token(self, src: bytes) -> int:
+    def next_token(self, src: bytes) -> Optional[int]:
         last_token, last = None, self.root
         for i in range(0, len(src)):
             if current := last.get(src[i]):
                 if token := current[0]: last_token = token
                 last = current[1]
-            else:
-                break
+            else: break
         return last_token
 
     def encode_bytes(self, src: bytes) -> Generator[int, None, None]:
