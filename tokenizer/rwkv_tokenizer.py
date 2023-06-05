@@ -217,34 +217,40 @@ class TRIE_TOKENIZER():
 # Tokenizer #4 (fast) https://github.com/LoganDark
 ########################################################################################################
 
-from typing import Generator
+from typing import Generator, Iterable
 from ast import literal_eval
+
+# noinspection PyUnresolvedReferences,PyUnboundLocalVariable
+FastTokenizerEntry: TypeAlias = Tuple[Optional[int], Dict[int, FastTokenizerEntry]]
 
 class FastTokenizer:
     __slots__ = ('tok2val', 'root')
 
-    def __init__(self, file_name):
+    tok2val: Dict[int, bytes]
+    root: Dict[int, FastTokenizerEntry]
+
+    def __init__(self, file_name) -> None:
         self.tok2val = {}
         self.root = {}
 
         with open(file_name, 'rt', encoding = 'utf-8') as file:
             for line in file:
-                token, value = line.rstrip().split(' ', 1)
-                value, expected_len = value.rsplit(' ', 1)
-                value = literal_eval(value)
-                if isinstance(value, str): value = value.encode('utf-8')
-                token, value, expected_len = int(token), value, int(expected_len)
-                assert len(value) == expected_len
-                self.add_token(token, value)
+                token_str, value_repr = line.rstrip().split(' ', 1)
+                value_repr, len_str = value_repr.rsplit(' ', 1)
+                value_str: Union[bytes, str] = literal_eval(value_repr)
+                value = value_str if isinstance(value_str, bytes) else value_str.encode('utf-8')
+                assert len(value) == int(len_str)
+                self.add_token(int(token_str), value)
 
-    def add_token(self, token: int, value: bytes):
+    def add_token(self, token: int, value: bytes) -> None:
         self.tok2val[token] = value
         pos = self.root
         for byte in value[:-1]: pos = pos.setdefault(byte, (None, {}))[1]
         pos.setdefault(value[-1], (token, {}))
 
     def next_token(self, src: bytes) -> Optional[int]:
-        last_token, last = None, self.root
+        last_token: Optional[int] = None
+        last = self.root
         for i in range(0, len(src)):
             if current := last.get(src[i]):
                 if token := current[0]: last_token = token
@@ -255,7 +261,8 @@ class FastTokenizer:
     def encode_bytes(self, src: bytes) -> Generator[int, None, None]:
         start, stop = 0, len(src)
         while start < stop:
-            last_token, last = None, self.root
+            last_token: Optional[int] = None
+            last = self.root
 
             for i in range(start, stop):
                 if current := last.get(src[i]):
@@ -268,13 +275,13 @@ class FastTokenizer:
             if last_token: yield last_token
             else: break
 
-    def decode_bytes(self, tokens: list[int]) -> bytes:
-        return b''.join(map(self.tok2val.get, tokens))
+    def decode_bytes(self, tokens: Iterable[int]) -> bytes:
+        return b''.join(map(self.tok2val.__getitem__, tokens))
 
     def encode(self, src: str) -> Generator[int, None, None]:
         return self.encode_bytes(src.encode('utf-8'))
 
-    def decode(self, tokens: list[int]) -> str:
+    def decode(self, tokens: Iterable[int]) -> str:
         return self.decode_bytes(tokens).decode('utf-8')
 
 ########################################################################################################
