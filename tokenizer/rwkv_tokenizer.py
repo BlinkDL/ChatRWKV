@@ -221,11 +221,10 @@ from typing import Generator
 from ast import literal_eval
 
 class FastTokenizer:
-    __slots__ = ('tok2val', 'tok2len', 'root')
+    __slots__ = ('tok2val', 'root')
 
     def __init__(self, file_name):
         self.tok2val = {}
-        self.tok2len = {}
         self.root = {}
 
         with open(file_name, 'rt', encoding = 'utf-8') as file:
@@ -240,8 +239,6 @@ class FastTokenizer:
 
     def add_token(self, token: int, value: bytes):
         self.tok2val[token] = value
-        self.tok2len[token] = len(value)
-
         pos = self.root
         for byte in value[:-1]: pos = pos.setdefault(byte, (None, {}))[1]
         pos.setdefault(value[-1], (token, {}))
