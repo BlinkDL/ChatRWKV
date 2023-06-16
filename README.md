@@ -7,6 +7,8 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
 
+Note: RWKV-4-World is the best model: generation & chat & code in 100+ world languages, with the best English zero-shot & in-context learning ability too.
+
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 
 Note RWKV_CUDA_ON will build a CUDA kernel (much faster & saves VRAM). Here is how to build it ("pip install ninja" first):
