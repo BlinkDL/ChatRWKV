@@ -363,13 +363,14 @@ Below is an instruction that describes a task. Write a response that appropriate
             )
             # if token == END_OF_TEXT:
             #     break
+            tokens = [END_OF_LINE, END_OF_LINE] if token == END_OF_TEXT else [token]
             if token not in occurrence:
                 occurrence[token] = 1
             else:
                 occurrence[token] += 1
             
             out = run_rnn([token], newline_adj=newline_adj)
-            out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
+            # out[END_OF_TEXT] = -999999999  # disable <|endoftext|>
 
             xxx = pipeline.decode(model_tokens[out_last:])
             if '\ufffd' not in xxx: # avoid utf-8 display issues
@@ -380,6 +381,22 @@ Below is an instruction that describes a task. Write a response that appropriate
             if '\n\n' in send_msg:
                 send_msg = send_msg.strip()
                 break
+            
+            idx = send_msg.find(f'{user}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = pipeline.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
+
+            idx = send_msg.find(f'{bot}{interface}')
+            if idx >= 0:
+                send_msg = f' {send_msg[:idx].strip()}\n\n'
+                tokens = pipeline.encode(send_msg)
+                out = load_all_stat(srv, 'chat_pre')
+                out = run_rnn(tokens)
+                send_msg = send_msg.strip()
             
             # send_msg = pipeline.decode(model_tokens[begin:]).strip()
             # if send_msg.endswith(f'{user}{interface}'): # warning: needs to fix state too !!!
