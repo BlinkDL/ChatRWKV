@@ -68,7 +68,7 @@ def my_qa_generator(ctx):
 
         for n in occurrence: out[n] -= (0.4 + occurrence[n] * 0.4) #### higher repetition penalty because of lower top_p here
         
-        token = pipeline.sample_logits(out, temperature=1.0, top_p=0.1) #### sample the next token
+        token = pipeline.sample_logits(out, temperature=1.0, top_p=0.2) #### sample the next token
 
         if token == 0: break #### exit at token [0] = <|endoftext|>
         
@@ -79,11 +79,13 @@ def my_qa_generator(ctx):
         
         tmp = pipeline.decode(out_tokens[out_len:])
         if ('\ufffd' not in tmp) and (not tmp.endswith('\n')): #### print() only when out_str is valid utf-8 and not end with \n
+            out_str += tmp
             print(tmp, end = '', flush = True)
-            out_str += tmp
             out_len = i + 1    
-        if '\n\n' in tmp: #### exit at '\n\n'
+        elif '\n\n' in tmp: #### exit at '\n\n'
+            tmp = tmp.rstrip()
             out_str += tmp
+            print(tmp, end = '', flush = True)
             break
     return out_str.strip()
 
@@ -92,7 +94,7 @@ for question in ['Why is there something instead of nothing?', '我捡到了一�
     chat_rounds = ['User: hi',
     'Assistant: Hi. I am your assistant and I will provide expert full response in full details.',
     'User: ' + re.sub(r'\n{2,}', '\n', question).strip().replace('\r\n','\n'), #### replace all \n\n and \r\n by \n
-    'Assistant:']
+    'Assistant:'] #### dont add space after this final ":"
 
     print('\n\n'.join(chat_rounds[-2:]), end = '')
 
