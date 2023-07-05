@@ -21,6 +21,8 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
+**World demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_WORLD.py
+
 **Raven Q&A demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/v2/benchmark_more.py
 
 ![ChatRWKV-strategy](ChatRWKV-strategy.png)
