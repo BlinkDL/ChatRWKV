@@ -248,7 +248,7 @@ print(f'Benchmark {src_len} tokens...')
 
 def benchmark(XXX):
     min_t = 1e100
-    for i in range(5):
+    for i in range(10):
         t_begin = time.time_ns()
         tokens = XXX.encode(src)
         min_t = min(time.time_ns() - t_begin, min_t)
@@ -270,7 +270,7 @@ benchmark(TRIE_TEST)
 
 print('Unit test...')
 
-QQQ = []
+QQQ = ['', ' ', 'Õ\U000683b8', b'\xe6\xaa\x81'.decode('utf-8')]
 
 for TRIAL in range(500):
     x = ''
