@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <assert.h>
 #include "ATen/ATen.h"
+#include "gemv.cuh"
+#include "wkv_forward_one.cuh"
 #include <cuda_fp16.h>
+#include <functional>
+#include <torch/extension.h>
+
+using torch::Tensor;
 #define MIN_VALUE (-1e38)
 typedef at::Half fp16;
-__half *cast(fp16 *ptr) {
-    return reinterpret_cast<__half *>(ptr);
-}
+__half *cast(fp16 *ptr) { return reinterpret_cast<__half *>(ptr); }
 
 template <typename F>
 __global__ void kernel_wkv_forward(const int B, const int T, const int C,
@@ -243,4 +247,47 @@ void cuda_mm8_one<fp16>(int N, int M,
     kernel_mm_one_fp16i8<<<gridSize, blockSize>>>(
         N, M, cast(x), w, w_stride,
         cast(mx), cast(rx), cast(my), cast(ry), y);
+}
+
+void ffn_one(torch::Tensor rw, torch::Tensor rx, torch::Tensor kw,
+             torch::Tensor kx, torch::Tensor vw, torch::Tensor x,
+             /* imm */ torch::Tensor r, /* imm */ torch::Tensor vx,
+             /* out */ torch::Tensor x_plus_out) {
+
+  // r = torch.sigmoid(gemv(rw, rx))
+  gemv_fp16<half>(rw, rx, r, SigmoidEpilogue{});
+
+  // vx = torch.square(torch.relu(gemv(kw, kx)))
+  gemv_fp16<half>(kw, kx, vx, ReLUAndSqaureEpilogue{});
+
+  // out = r * gemv(vw, vx)
+  // x + out
+  half *r_ptr = cast(r.data_ptr<fp16>());
+  half *x_ptr = cast(x.data_ptr<fp16>());
+  gemv_fp16<half>(vw, vx, x_plus_out,
+                         ScaleAndBiasEpilogue{r_ptr, x_ptr});
+}
+
+void att_one(Tensor x, Tensor kw, Tensor kx, Tensor vw, Tensor vx, Tensor rw,
+             Tensor rx, Tensor ow, Tensor t_first, /* imm */ Tensor k,
+             Tensor pp, Tensor ww, Tensor aa, Tensor bb, Tensor t_decay,
+             /* imm */ Tensor v, /* in & out */ Tensor r,
+             /* out */ Tensor x_plus_out, /* out */ Tensor t1,
+             /* out */ Tensor t2, /* out */ Tensor p) {
+  gemv_fp16<float>(kw, kx, k, IdentityEpilogue<float>{});
+  gemv_fp16<float>(vw, vx, v, IdentityEpilogue<float>{});
+  gemv_fp16<half>(rw, rx, r, SigmoidEpilogue{});
+
+  size_t elem_num = t_first.numel();
+  // 256 is good enough on most GPUs
+  const int32_t BLOCK_SIZE = 256;
+  assert(elem_num % BLOCK_SIZE == 0);
+  wkv_forward_one<<<elem_num / BLOCK_SIZE, BLOCK_SIZE>>>(
+      t_first.data_ptr<float>(), k.data_ptr<float>(), pp.data_ptr<float>(),
+      aa.data_ptr<float>(), bb.data_ptr<float>(), t_decay.data_ptr<float>(),
+      v.data_ptr<float>(), t1.data_ptr<float>(), t2.data_ptr<float>(),
+      p.data_ptr<float>(), cast(r.data_ptr<fp16>()), elem_num);
+
+  half *x_ptr = cast(x.data_ptr<fp16>());
+  gemv_fp16<half>(ow, r, x_plus_out, BiasEpilogue{x_ptr});
 }

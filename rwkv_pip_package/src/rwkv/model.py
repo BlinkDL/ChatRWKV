@@ -28,9 +28,11 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
     load(
         name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/wkv_forward_one.cu"],
         verbose=True,
         extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+        # For debugging:
+        # extra_cuda_cflags=["-t 4", "-std=c++17", "-g", "-G"],
         is_python_module=False)
 
     @MyStatic
@@ -50,10 +52,10 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
         assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
-        assert x.shape == [B, N]
-        assert w.shape == [N, M]
-        assert rx.shape == mx.shape == [M]
-        assert ry.shape == my.shape == [N, 1]
+        assert x.shape == (B, N)
+        assert w.shape == (N, M)
+        assert rx.shape == mx.shape == (M,)
+        assert ry.shape == my.shape == (N, 1)
         y = torch.empty((B, M), device=w.device, dtype=x.dtype)
         torch.ops.rwkv.mm8_seq(B, N, M, x, w, mx, rx, my, ry, y)
         return y
@@ -62,10 +64,10 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
         assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
-        assert x.shape == [N]
-        assert w.shape == [N, M]
-        assert rx.shape == mx.shape == [M]
-        assert ry.shape == my.shape == [N, 1]
+        assert x.shape == (N,)
+        assert w.shape == (N, M)
+        assert rx.shape == mx.shape == (M,)
+        assert ry.shape == my.shape == (N, 1)
         y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y.to(dtype=x.dtype)
@@ -223,7 +225,9 @@ class RWKV(MyModule):
 
                     if '.time_' in x:
                         w[x] = w[x].squeeze()
-                    if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
+                    if 'head.weight' in x:
+                        w[x] = w[x].t()
+                    if (WTYPE != torch.float16 or os.environ["RWKV_CUDA_ON"] != '1') and ('key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x):
                         w[x] = w[x].t()
 
                     if '.time_decay' in x: # need fp32 for this
@@ -343,6 +347,38 @@ class RWKV(MyModule):
                 return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
             else:
                 return self.torch_mm8_one(x, w, mx, rx, my, ry)
+
+        @MyFunction
+        def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+            xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+            kx = xx * k_mix + sx * (1 - k_mix)
+            rx = xx * r_mix + sx * (1 - r_mix)
+
+            r = torch.empty((rw.shape[0],), dtype=x.dtype, device=x.device)
+            vx = torch.empty((kw.shape[0],), dtype=x.dtype, device=x.device)
+            x_plus_out = torch.empty((vw.shape[0],), dtype=x.dtype, device=x.device)
+
+            torch.ops.rwkv.ffn_one(rw, rx, kw, kx, vw, x, r, vx, x_plus_out)
+
+            return x_plus_out, xx
+
+        @MyFunction
+        def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+            xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+            kx = xx * k_mix + sx * (1 - k_mix)
+            vx = xx * v_mix + sx * (1 - v_mix)
+            rx = xx * r_mix + sx * (1 - r_mix)
+
+            k_t = torch.empty((kw.shape[0],), dtype=torch.float32, device=x.device)       
+            v_t = torch.empty((vw.shape[0],), dtype=torch.float32, device=x.device)       
+            r_t = torch.empty((rw.shape[0],), dtype=torch.float16, device=x.device)       
+            x_plus_out_t = torch.empty_like(x)
+            t1_t = torch.empty_like(x, dtype=torch.float32)
+            t2_t = torch.empty_like(x, dtype=torch.float32)
+            p_t = torch.empty_like(x, dtype=torch.float32)
+            torch.ops.rwkv.att_one(x, kw, kx, vw, vx, rw, rx, ow, t_first, k_t, pp, ow, aa, bb, t_decay, v_t, r_t, x_plus_out_t, t1_t, t2_t, p_t)
+            return x_plus_out_t, xx, t1_t, t2_t, p_t
+
     else:
         @MyFunction
         def mm8_seq(self, x, w, mx, rx, my, ry):
@@ -351,18 +387,42 @@ class RWKV(MyModule):
         def mm8_one(self, x, w, mx, rx, my, ry):
             return self.torch_mm8_one(x, w, mx, rx, my, ry)
 
+        @MyFunction
+        def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+            xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+            kx = xx * k_mix + sx * (1 - k_mix)
+            rx = xx * r_mix + sx * (1 - r_mix)
+
+            r = torch.sigmoid(rx @ rw)
+            vx = torch.square(torch.relu(kx @ kw))
+            out = r * (vx @ vw)
+            return x + out, xx
+
+        @MyFunction
+        def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+            xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+            kx = xx * k_mix + sx * (1 - k_mix)
+            vx = xx * v_mix + sx * (1 - v_mix)
+            rx = xx * r_mix + sx * (1 - r_mix)
+
+            r = torch.sigmoid(rx @ rw)
+            k = (kx @ kw).float()
+            v = (vx @ vw).float()
+
+            ww = t_first + k
+            p = torch.maximum(pp, ww)
+            e1 = torch.exp(pp - p)
+            e2 = torch.exp(ww - p)
+            wkv = ((e1 * aa + e2 * v) / (e1 * bb + e2)).to(dtype=x.dtype)
+            ww = t_decay + pp
+            p = torch.maximum(ww, k)
+            e1 = torch.exp(ww - p)
+            e2 = torch.exp(k - p)
+
+            out = (r * wkv) @ ow
+            return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
+
     ########################################################################################################
-
-    @MyFunction
-    def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(rx @ rw)
-        vx = torch.square(torch.relu(kx @ kw))
-        out = r * (vx @ vw)
-        return x + out, xx
 
     @MyFunction
     def ffn_one_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -402,30 +462,6 @@ class RWKV(MyModule):
         return x + out, xx[-1,:]
 
     ########################################################################################################
-
-    @MyFunction
-    def att_one(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        vx = xx * v_mix + sx * (1 - v_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(rx @ rw)
-        k = (kx @ kw).float()
-        v = (vx @ vw).float()
-
-        ww = t_first + k
-        p = torch.maximum(pp, ww)
-        e1 = torch.exp(pp - p)
-        e2 = torch.exp(ww - p)
-        wkv = ((e1 * aa + e2 * v) / (e1 * bb + e2)).to(dtype=x.dtype)
-        ww = t_decay + pp
-        p = torch.maximum(ww, k)
-        e1 = torch.exp(ww - p)
-        e2 = torch.exp(k - p)
-
-        out = (r * wkv) @ ow
-        return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
 
     @MyFunction
     def att_one_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):

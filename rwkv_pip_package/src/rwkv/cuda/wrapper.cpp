@@ -116,14 +116,24 @@ void mm8_one(int64_t N, int64_t M,
     }
 }
 
+using torch::Tensor;
+
+void ffn_one(Tensor rw, Tensor rx, Tensor kw, Tensor kx, Tensor vw, Tensor x, /* imm */ Tensor r, /* imm */ Tensor vx, /* out */ Tensor x_plus_out);
+
+void att_one(Tensor x, Tensor kw, Tensor kx, Tensor vw, Tensor vx, Tensor rw, Tensor rx, Tensor ow, Tensor t_first, /* imm */ Tensor k, Tensor pp, Tensor ww, Tensor aa, Tensor bb, Tensor t_decay, /* imm */ Tensor v, /* in & out */ Tensor r, /* out */ Tensor x_plus_out, /* out */ Tensor t1, /* out */ Tensor t2, /* out */ Tensor p);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("wkv_forward", &wkv_forward, "wkv forward");
     m.def("mm8_seq", &mm8_seq, "mm8 seq");
     m.def("mm8_one", &mm8_one, "mm8 one");
+    m.def("ffn_one", &ffn_one, "ffn one large kernel");
+    m.def("att_one", &att_one, "att one");
 }
 
 TORCH_LIBRARY(rwkv, m) {
     m.def("wkv_forward", wkv_forward);
     m.def("mm8_seq", mm8_seq);
     m.def("mm8_one", mm8_one);
+    m.def("ffn_one", ffn_one);
+    m.def("att_one", att_one);
 }

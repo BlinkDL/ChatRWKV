@@ -15,7 +15,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0'
 
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-0.1B-v1-20230520-ctx4096'
+MODEL_NAME = '/data_turbo/evals/models/rwkv/RWKV-4-World-0.1B-v1-20230520-ctx4096.pth'
 
 print(f'\nLoading ChatRWKV https://github.com/BlinkDL/ChatRWKV')
 import torch

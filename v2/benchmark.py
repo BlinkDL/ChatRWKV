@@ -3,27 +3,39 @@
 ########################################################################################################
 
 import os, sys, types, json, math, time
+import argparse
+import functools
+from collections import defaultdict
 current_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f'{current_path}/../rwkv_pip_package/src')
-try:
-    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
-except:
-    pass
+parser = argparse.ArgumentParser()
+parser.add_argument('--gpu', type=int, default=0)
+parser.add_argument('--model', type=str, default='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096')
+parser.add_argument('--strategy', type=str, default='cuda fp16')
+parser.add_argument('--jit', action='store_true')
+parser.add_argument('--custom-cuda-op', action='store_true')
+parser.add_argument('--compile', action='store_true')
+parser.add_argument('--backend', type=str, default='inductor')
+parser.add_argument('--only-fast', action='store_true')
+parser.add_argument('--only-slow', action='store_true')
+parser.add_argument('--nsys-profiler', action='store_true')
+args = parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
-with open(f"{current_path}/../misc/lambada_test.jsonl", "r", encoding="utf-8") as f:
-    todo = [json.loads(line) for line in f]
-    todo = [[doc['text'].rsplit(' ', 1)[0], " " + doc['text'].rsplit(' ', 1)[1]] for doc in todo]
 
 ########################################################################################################
 
-os.environ["RWKV_JIT_ON"] = '1'
-os.environ["RWKV_CUDA_ON"] = '1'
+os.environ["RWKV_JIT_ON"] = str(int(args.jit))
+os.environ["RWKV_CUDA_ON"] = str(int(args.custom_cuda_op))
 
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230213-8019'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20230109-ctx4096'
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+# MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx4096'
+# MODEL_NAME = '/data_turbo/evals/models/rwkv/RWKV-4-World-0.1B-v1-20230520-ctx4096.pth'
+# MODEL_NAME = '/data_turbo/evals/models/rwkv/RWKV-4-World-7B-v1-OnlyForTest_52%_trained-20230606-ctx4096.pth'
+MODEL_NAME = args.model
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023'
 
 PAD_SEQ = [187]
@@ -49,10 +61,9 @@ from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 
 print(f'Loading model - {MODEL_NAME}')
-model = RWKV(model=MODEL_NAME, strategy='cuda fp16')
+# model = RWKV(model=MODEL_NAME, strategy='cuda fp16 *15+')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16 *0+')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16 *10+')
-# model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *0+')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *10+')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *1 -> cuda fp16')
@@ -60,26 +71,55 @@ model = RWKV(model=MODEL_NAME, strategy='cuda fp16')
 # model = RWKV(model=MODEL_NAME, strategy='cpu fp32')
 # model = RWKV(model=MODEL_NAME, strategy='cpu fp32i8')
 # model = RWKV(model=MODEL_NAME, strategy='cuda fp16i8 *10 -> cuda fp16 *0+')
-pipeline = PIPELINE(model, "20B_tokenizer.json")
+model = RWKV(model=MODEL_NAME, strategy=args.strategy)
+pipeline = PIPELINE(model, "rwkv_vocab_v20230424")
 
-print('Warmup...')
-out, state = model.forward([187, 510, 1563, 310, 247], None, full_output=True)
-print(out[-1,:].detach().cpu().numpy())
-out, state = model.forward([187], None)
-print(out.detach().cpu().numpy())
-out, state = model.forward([510, 1563], state)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())
-out, state = model.forward([187], None)
-out, state = model.forward([510, 1563, 310, 247], state)
-print(out.detach().cpu().numpy())
-out, state = model.forward([187, 510, 1563, 310], None)
-out, state = model.forward([247], state)
-print(out.detach().cpu().numpy())
-out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())
+if args.nsys_profiler:
+    def nsys(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            name = func.__name__
+            torch.cuda.nvtx.range_push(name)
+            result = func(*args, **kwargs)
+            torch.cuda.nvtx.range_pop()
+            return result
+        return wrapper
+
+    if args.custom_cuda_op:
+        model.cuda_att_seq = nsys(model.cuda_att_seq)
+        model.cuda_att_seq_i8 = nsys(model.cuda_att_seq_i8)
+    model.att_seq = nsys(model.att_seq)
+    model.att_seq_i8 = nsys(model.att_seq_i8)
+    model.att_one = nsys(model.att_one)
+    model.att_one_i8 = nsys(model.att_one_i8)
+    model.ffn_seq = nsys(model.ffn_seq)
+    model.ffn_seq_i8 = nsys(model.ffn_seq_i8)
+    model.ffn_one = nsys(model.ffn_one)
+    model.ffn_one_i8 = nsys(model.ffn_one_i8)
+    model.mm8_seq = nsys(model.mm8_seq)
+    model.mm8_one = nsys(model.mm8_one)
+
+if args.compile:
+    model = torch.compile(model, backend=args.backend)
+
+# print('Warmup...')
+# out, state = model.forward([187, 510, 1563, 310, 247], None, full_output=True)
+# print(out[-1,:].detach().cpu().numpy())
+# out, state = model.forward([187], None)
+# print(out.detach().cpu().numpy())
+# out, state = model.forward([510, 1563], state)
+# out, state = model.forward([310, 247], state)
+# print(out.detach().cpu().numpy())
+# out, state = model.forward([187], None)
+# out, state = model.forward([510, 1563, 310, 247], state)
+# print(out.detach().cpu().numpy())
+# out, state = model.forward([187, 510, 1563, 310], None)
+# out, state = model.forward([247], state)
+# print(out.detach().cpu().numpy())
+# out, state = model.forward([187, 510], None)
+# out, state = model.forward([1563], state)
+# out, state = model.forward([310, 247], state)
+# print(out.detach().cpu().numpy())
 
 ########################################################################################################
 
@@ -87,32 +127,44 @@ print(out.detach().cpu().numpy())
 init_token = pipeline.encode("In the event that the Purchaser defaults in the payment of any instalment of purchase price")
 
 print('Benchmark speed...')
-time_slot = {}
+time_slot = defaultdict(list)
 
 def record_time(name):
-    if name not in time_slot:
-        time_slot[name] = 1e20
     tt = (time.time_ns() - time_ref) / 1e9
-    if tt < time_slot[name]:
-        time_slot[name] = tt
+    time_slot[name].append(tt)
+
+def avg(lst):
+    return sum(lst) / len(lst)
 
 for i in range(10):
-    time_ref = time.time_ns()
-    out, state = model.forward(init_token, None)
-    aa = out.detach().cpu().numpy()
-    record_time('fast')
-    print(f"fast {round(time_slot['fast'], 4)}s {aa}")
+    if not args.only_slow:
+        time_ref = time.time_ns()
+        out, state = model.forward(init_token, None)
+        aa = out.detach().cpu().numpy()
+        # warmup the jit
+        if i == 0:
+            continue
+        record_time('fast')
+        ts = time_slot['fast']
+        print(f"fast min {round(min(ts), 4)}s, avg {round(avg(ts), 4)}s {aa}")
 
-    time_ref = time.time_ns()
-    for j in range(len(init_token)):
-        out, state = model.forward([init_token[j]], None if j == 0 else state)
-    aa = out.detach().cpu().numpy()
-    record_time('slow')
-    print(f"slow {round(time_slot['slow'], 4)}s {aa}")
+    if not args.only_fast:
+        time_ref = time.time_ns()
+        for j in range(len(init_token)):
+            out, state = model.forward([init_token[j]], None if j == 0 else state)
+        aa = out.detach().cpu().numpy()
+        record_time('slow')
+        ts = time_slot['slow']
+        print(f"slow min {round(min(ts), 4)}s, avg {round(avg(ts), 4)}s {aa}")
 
-# exit(0)
+if args.only_fast or args.only_slow:
+    exit(0)
 
 ########################################################################################################
+
+with open(f"{current_path}/../misc/lambada_test.jsonl", "r", encoding="utf-8") as f:
+    todo = [json.loads(line) for line in f]
+    todo = [[doc['text'].rsplit(' ', 1)[0], " " + doc['text'].rsplit(' ', 1)[1]] for doc in todo]
 
 print('Check LAMBADA...')
 xsum = 0

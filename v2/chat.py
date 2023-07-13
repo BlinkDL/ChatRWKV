@@ -42,6 +42,7 @@ torch.backends.cuda.matmul.allow_tf32 = True
 ########################################################################################################
 
 # args.strategy = 'cpu fp32'
+# args.strategy = 'cuda bf16'
 args.strategy = 'cuda fp16'
 # args.strategy = 'cuda:0 fp16 -> cuda:1 fp16'
 # args.strategy = 'cuda fp16i8 *10 -> cuda fp16'
@@ -58,7 +59,8 @@ CHAT_LANG = 'English' # English // Chinese // more to come
 # Use '/' in model path, instead of '\'
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192'
+    # args.MODEL_NAME = '/data_turbo/evals/models/rwkv/RWKV-4-World-0.1B-v1-20230520-ctx4096.pth'
+    args.MODEL_NAME = '/data_turbo/evals/models/rwkv/RWKV-4-World-7B-v1-OnlyForTest_52%_trained-20230606-ctx4096.pth'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
 
@@ -82,7 +84,7 @@ FREE_GEN_LEN = 256
 # For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
 # Explanation: https://platform.openai.com/docs/api-reference/parameter-details
 GEN_TEMP = 1.2 # It could be a good idea to increase temp when top_p is low
-GEN_TOP_P = 0.5 # Reduce top_p (to 0.5, 0.2, 0.1 etc.) for better Q&A accuracy (and less diversity)
+GEN_TOP_P = 0.0 # Reduce top_p (to 0.5, 0.2, 0.1 etc.) for better Q&A accuracy (and less diversity)
 GEN_alpha_presence = 0.4 # Presence Penalty
 GEN_alpha_frequency = 0.4 # Frequency Penalty
 GEN_penalty_decay = 0.996
@@ -471,8 +473,9 @@ print(f'{pipeline.decode(model_tokens)}'.replace(f'\n\n{bot}',f'\n{bot}'), end='
 ########################################################################################################
 
 while True:
-    msg = prompt(f'{user}{interface} ')
+    msg = 'hi' # prompt(f'{user}{interface} ')
     if len(msg.strip()) > 0:
         on_message(msg)
+        exit(0)
     else:
         print('Error: please say something')
