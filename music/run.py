@@ -55,6 +55,7 @@ for TRIAL in range(10):
             out[n] -= (0 + occurrence[n] * 0.5)
         
         out[0] += (i - 2000) / 500 # try not to be too short or too long
+        out[127] -= 1 # avoid "t125"
 
         # uncomment for piano-only mode
         # out[128:12416] -= 1e10
@@ -68,7 +69,7 @@ for TRIAL in range(10):
         if token == 0: break
         
         for n in occurrence: occurrence[n] *= 0.997 #### decay repetition penalty
-        if token >= 128:
+        if token >= 128 or token == 127:
             occurrence[token] = 1 + (occurrence[token] if token in occurrence else 0)
         else:
             occurrence[token] = 0.3 + (occurrence[token] if token in occurrence else 0)
