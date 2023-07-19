@@ -28,7 +28,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
     load(
         name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
         verbose=True,
         extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
         is_python_module=False)
@@ -50,10 +50,10 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
         assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
-        assert x.shape == [B, N]
-        assert w.shape == [N, M]
-        assert rx.shape == mx.shape == [M]
-        assert ry.shape == my.shape == [N, 1]
+        assert x.shape == (B, N)
+        assert w.shape == (N, M)
+        assert rx.shape == mx.shape == (M,)
+        assert ry.shape == my.shape == (N, 1)
         y = torch.empty((B, M), device=w.device, dtype=x.dtype)
         torch.ops.rwkv.mm8_seq(B, N, M, x, w, mx, rx, my, ry, y)
         return y
@@ -62,15 +62,30 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         assert x.dtype == mx.dtype == rx.dtype == my.dtype == ry.dtype
         assert x.dtype == torch.float32 or x.dtype == torch.float16
         assert w.dtype == torch.uint8
-        assert x.shape == [N]
-        assert w.shape == [N, M]
-        assert rx.shape == mx.shape == [M]
-        assert ry.shape == my.shape == [N, 1]
+        assert x.shape == (N,)
+        assert w.shape == (N, M)
+        assert rx.shape == mx.shape == (M,)
+        assert ry.shape == my.shape == (N, 1)
         y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y.to(dtype=x.dtype)
+    @MyStatic
+    def gemm(a, b, output_dtype: torch.dtype=torch.float16):
+        if a.dtype == b.dtype == torch.float16 and a.device.type == 'cuda':
+            assert len(b.shape) == 2
+            if len(a.shape) == 1:
+                c = torch.empty((b.shape[-1],), dtype=output_dtype, device=a.device)
+                a = a.unsqueeze(0)
+            else:
+                c = torch.empty((a.shape[0], b.shape[-1]), dtype=output_dtype, device=a.device)
+            torch.ops.rwkv.gemm_fp16_cublas(a, b, c)
+            return c
+        else:
+            return (a @ b).to(output_dtype)
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
+    def gemm(a, b, output_dtype: torch.dtype=torch.float16):
+        return (a @ b).to(output_dtype)
 
 ########################################################################################################
 
@@ -359,9 +374,9 @@ class RWKV(MyModule):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw)
-        vx = torch.square(torch.relu(kx @ kw))
-        out = r * (vx @ vw)
+        r = torch.sigmoid(gemm(rx, rw))
+        vx = torch.square(torch.relu(gemm(kx, kw)))
+        out = r * gemm(vx, vw)
         return x + out, xx
 
     @MyFunction
@@ -384,9 +399,9 @@ class RWKV(MyModule):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw)
-        vx = torch.square(torch.relu(kx @ kw))
-        out = r * (vx @ vw)
+        r = torch.sigmoid(gemm(rx, rw))
+        vx = torch.square(torch.relu(gemm(kx, kw)))
+        out = r * gemm(vx, vw)
         return x + out, xx[-1,:]
 
     @MyFunction
@@ -410,9 +425,9 @@ class RWKV(MyModule):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw)
-        k = (kx @ kw).float()
-        v = (vx @ vw).float()
+        r = torch.sigmoid(gemm(rx, rw))
+        k = gemm(kx, kw, output_dtype=torch.float32)
+        v = gemm(vx, vw, output_dtype=torch.float32)
 
         ww = t_first + k
         p = torch.maximum(pp, ww)
@@ -424,7 +439,7 @@ class RWKV(MyModule):
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
 
-        out = (r * wkv) @ ow
+        out = gemm(r * wkv, ow)
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
 
     @MyFunction
@@ -461,9 +476,9 @@ class RWKV(MyModule):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(rx @ rw)
-        k = (kx @ kw).float()
-        v = (vx @ vw).float()
+        r = torch.sigmoid(gemm(rx, rw))
+        k = gemm(kx, kw, output_dtype=torch.float32)
+        v = gemm(vx, vw, output_dtype=torch.float32)
 
         T = x.shape[0]
         for t in range(T):
@@ -481,7 +496,7 @@ class RWKV(MyModule):
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-        out = (r * sx) @ ow
+        out = gemm(r * sx, ow)
         return x + out, xx[-1,:], aa, bb, pp
 
     @MyFunction
@@ -527,12 +542,12 @@ class RWKV(MyModule):
             vx = xx * v_mix + sx * (1 - v_mix)
             rx = xx * r_mix + sx * (1 - r_mix)
 
-            r = torch.sigmoid(rx @ rw)
-            k = kx @ kw
-            v = vx @ vw
+            r = torch.sigmoid(gemm(rx, rw))
+            k = gemm(kx, kw, output_dtype=torch.float32)
+            v = gemm(vx, vw, output_dtype=torch.float32)
             y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
             
-            out = (r * y) @ ow
+            out = gemm(r * y.to(x.dtype), ow)
             return x + out, xx[-1,:], aa, bb, pp
 
         @MyFunction
