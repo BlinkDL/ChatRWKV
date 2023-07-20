@@ -2,6 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+from typing import Optional
 import types, gc, os, time, re
 import torch
 from torch.nn import functional as F
@@ -70,7 +71,9 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y.to(dtype=x.dtype)
     @MyStatic
-    def gemm(a, b, output_dtype: torch.dtype=torch.float16):
+    def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
+        if output_dtype is None:
+            output_dtype = a.dtype
         if a.dtype == b.dtype == torch.float16 and a.device.type == 'cuda':
             assert len(b.shape) == 2
             if len(a.shape) == 1:
@@ -84,7 +87,9 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
             return (a @ b).to(output_dtype)
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
-    def gemm(a, b, output_dtype: torch.dtype=torch.float16):
+    def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
+        if output_dtype is None:
+            output_dtype = a.dtype
         return (a @ b).to(output_dtype)
 
 ########################################################################################################
