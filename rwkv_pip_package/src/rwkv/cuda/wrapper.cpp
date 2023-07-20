@@ -120,11 +120,33 @@ using torch::Tensor;
 
 void gemm_fp16_cublas(Tensor a, Tensor b, Tensor c);
 
+Tensor att_one(Tensor x, Tensor ln_w, Tensor ln_b, Tensor sx, Tensor k_mix,
+             Tensor v_mix, Tensor r_mix, Tensor kw,
+             /* imm */ Tensor kx, Tensor vw, /* imm */ Tensor vx, Tensor rw,
+             /* imm */ Tensor rx, Tensor ow, Tensor t_first,
+             /* imm */ Tensor k, Tensor pp, Tensor ww, Tensor aa, Tensor bb,
+             Tensor t_decay, /* imm */ Tensor v, /* in & out */ Tensor r,
+             /* out */ Tensor x_plus_out, /* out */ Tensor t1,
+             /* out */ Tensor t2, /* out */ Tensor p);
+
+Tensor att_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor v_mix, Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               Tensor ow, Tensor t_first, Tensor pp, Tensor aa, Tensor bb,
+               Tensor t_decay, /* imm */ Tensor buf, /* out */ Tensor x_plus_out);
+
+Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               /* imm */ Tensor buf,
+               /* out */ Tensor x_plus_out);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("wkv_forward", &wkv_forward, "wkv forward");
     m.def("mm8_seq", &mm8_seq, "mm8 seq");
     m.def("mm8_one", &mm8_one, "mm8 one");
     m.def("gemm_fp16_cublas", &gemm_fp16_cublas, "gemv fp16 cublas");
+    m.def("att_one", &att_one, "att one");
+    m.def("att_seq", &att_seq, "att seq");
+    m.def("ffn_seq", &ffn_seq, "ffn seq");
 }
 
 TORCH_LIBRARY(rwkv, m) {
@@ -132,4 +154,7 @@ TORCH_LIBRARY(rwkv, m) {
     m.def("mm8_seq", mm8_seq);
     m.def("mm8_one", mm8_one);
     m.def("gemm_fp16_cublas", gemm_fp16_cublas);
+    m.def("att_one", att_one);
+    m.def("att_seq", att_seq);
+    m.def("ffn_seq", ffn_seq);
 }
