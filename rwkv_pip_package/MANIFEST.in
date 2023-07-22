@@ -1,1 +1,2 @@
 include src/rwkv/cuda/*
+include src/rwkv/*.txt

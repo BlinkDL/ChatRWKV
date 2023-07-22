@@ -183,9 +183,9 @@ class TRIE_TOKENIZER():
         for t, i in self.token2idx.items():
             _ = self.root.add(t, val=(t, i))
 
-    def encodeBytes(self, src:bytes) -> list[int]:
+    def encodeBytes(self, src:bytes):
         idx:int = 0
-        tokens:list[int] = []
+        tokens = []
         while (idx < len(src)):
             _idx:int = idx
             idx, _, values = self.root.find_longest(src, idx)
@@ -343,7 +343,7 @@ benchmark(FAST_TEST)
 
 print('Unit test...')
 
-QQQ = []
+QQQ = ['', ' ', 'Õ\U000683b8', b'\xe6\xaa\x81'.decode('utf-8')]
 
 for TRIAL in range(500):
     x = ''

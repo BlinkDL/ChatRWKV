@@ -66,6 +66,7 @@ def my_print(s):
 args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100, # top_k = 0 then ignore
                      alpha_frequency = 0.25,
                      alpha_presence = 0.25,
+                     alpha_decay = 0.996, # gradually decay the penalty
                      token_ban = [0], # ban the generation of some tokens
                      token_stop = [], # stop generation whenever you see any token here
                      chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)

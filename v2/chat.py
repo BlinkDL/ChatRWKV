@@ -58,17 +58,18 @@ CHAT_LANG = 'English' # English // Chinese // more to come
 # Use '/' in model path, instead of '\'
 # Use convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM 
 if CHAT_LANG == 'English':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v9-Eng99%-Other1%-20230412-ctx8192'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v10-Eng99%-Other1%-20230418-ctx8192'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192'
     # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-14b/RWKV-4-Pile-14B-20230313-ctx8192-test1050'
 
 elif CHAT_LANG == 'Chinese': # Raven系列可以对话和 +i 问答。Novel系列是小说模型，请只用 +gen 指令续写。
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9x-Eng49%-Chn50%-Other1%-20230418-ctx4096'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-novel/RWKV-4-Novel-7B-v1-ChnEng-20230409-ctx4096'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v12-Eng49%-Chn49%-Jpn1%-Other1%-20230530-ctx8192'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-CHNtuned-3B-v1-20230625-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-novel/RWKV-4-Novel-7B-v1-ChnEng-20230426-ctx8192'
 
 elif CHAT_LANG == 'Japanese':
-    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v8-EngAndMore-20230408-ctx4096'
-    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9-Eng86%-Chn10%-JpnEspKor2%-Other2%-20230414-ctx4096'
+    # args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-14B-v8-EngAndMore-20230408-ctx4096'
+    args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v10-Eng89%-Jpn10%-Other1%-20230420-ctx4096'
 
 # -1.py for [User & Bot] (Q&A) prompt
 # -2.py for [Bob & Alice] (chat) prompt
@@ -80,18 +81,25 @@ FREE_GEN_LEN = 256
 
 # For better chat & QA quality: reduce temp, reduce top-p, increase repetition penalties
 # Explanation: https://platform.openai.com/docs/api-reference/parameter-details
-GEN_TEMP = 1.1 # It could be a good idea to increase temp when top_p is low
-GEN_TOP_P = 0.7 # Reduce top_p (to 0.5, 0.2, 0.1 etc.) for better Q&A accuracy (and less diversity)
-GEN_alpha_presence = 0.2 # Presence Penalty
-GEN_alpha_frequency = 0.2 # Frequency Penalty
+GEN_TEMP = 1.2 # It could be a good idea to increase temp when top_p is low
+GEN_TOP_P = 0.5 # Reduce top_p (to 0.5, 0.2, 0.1 etc.) for better Q&A accuracy (and less diversity)
+GEN_alpha_presence = 0.4 # Presence Penalty
+GEN_alpha_frequency = 0.4 # Frequency Penalty
+GEN_penalty_decay = 0.996
 AVOID_REPEAT = '，：？！'
 
 CHUNK_LEN = 256 # split input into chunks to save VRAM (shorter -> slower)
 
-# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-7B-v9-Eng86%-Chn10%-JpnEspKor2%-Other2%-20230414-ctx4096'
-# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-raven/RWKV-4-Raven-3B-v9x-Eng49%-Chn50%-Other1%-20230417-ctx4096'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-ENZH/rwkv-88'
-# args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/7-JP/rwkv-5'
+# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-CHNtuned-0.1B-v1-20230617-ctx4096'
+# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-CHNtuned-0.4B-v1-20230618-ctx4096'
+# args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-3B-v1-20230619-ctx4096'
+
+if args.MODEL_NAME.endswith('/'): # for my own usage
+    if 'rwkv-final.pth' in os.listdir(args.MODEL_NAME):
+        args.MODEL_NAME = args.MODEL_NAME + 'rwkv-final.pth'
+    else:
+        latest_file = sorted([x for x in os.listdir(args.MODEL_NAME) if x.endswith('.pth')], key=lambda x: os.path.getctime(os.path.join(args.MODEL_NAME, x)))[-1]
+        args.MODEL_NAME = args.MODEL_NAME + latest_file
 
 ########################################################################################################
 
@@ -114,10 +122,15 @@ def load_prompt(PROMPT_FILE):
 
 print(f'Loading model - {args.MODEL_NAME}')
 model = RWKV(model=args.MODEL_NAME, strategy=args.strategy)
-pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
-END_OF_TEXT = 0
-END_OF_LINE = 187
-END_OF_LINE_DOUBLE = 535
+if 'world/' in args.MODEL_NAME or '-World-' in args.MODEL_NAME:
+    pipeline = PIPELINE(model, "rwkv_vocab_v20230424")
+    END_OF_TEXT = 0
+    END_OF_LINE = 11
+else:
+    pipeline = PIPELINE(model, f"{current_path}/20B_tokenizer.json")
+    END_OF_TEXT = 0
+    END_OF_LINE = 187
+    END_OF_LINE_DOUBLE = 535
 # pipeline = PIPELINE(model, "cl100k_base")
 # END_OF_TEXT = 100257
 # END_OF_LINE = 198
@@ -167,6 +180,8 @@ def load_all_stat(srv, name):
 
 # Model only saw '\n\n' as [187, 187] before, but the tokenizer outputs [535] for it at the end
 def fix_tokens(tokens):
+    if 'world/' in args.MODEL_NAME or '-World-' in args.MODEL_NAME:
+        return tokens
     if len(tokens) > 0 and tokens[-1] == END_OF_LINE_DOUBLE:
         tokens = tokens[:-1] + [END_OF_LINE, END_OF_LINE]
     return tokens
@@ -304,6 +319,8 @@ Below is an instruction that describes a task. Write a response that appropriate
             )
             if token == END_OF_TEXT:
                 break
+            for xxx in occurrence:
+                occurrence[xxx] *= GEN_penalty_decay
             if token not in occurrence:
                 occurrence[token] = 1
             else:
@@ -363,6 +380,8 @@ Below is an instruction that describes a task. Write a response that appropriate
             )
             # if token == END_OF_TEXT:
             #     break
+            for xxx in occurrence:
+                occurrence[xxx] *= GEN_penalty_decay            
             if token not in occurrence:
                 occurrence[token] = 1
             else:

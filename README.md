@@ -3,9 +3,11 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 **Raven 14B** (finetuned on Alpaca+ShareGPT+...) Demo: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
 
-**Raven 7B** (finetuned on Alpaca+ShareGPT+...) Demo: https://huggingface.co/spaces/BlinkDL/Raven-RWKV-7B
+**World 7B** (supports 100+ world languages) Demo: https://huggingface.co/spaces/BlinkDL/RWKV-World-7B
 
 **Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
+
+Note: RWKV-4-World is the best model: generation & chat & code in 100+ world languages, with the best English zero-shot & in-context learning ability too.
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 
@@ -18,6 +20,8 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe select Desktop C++). Reinstall CUDA 11.7 (install VC++ extensions). Run v2/chat.py in "x64 native tools command prompt". 
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
+
+**World demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_WORLD.py
 
 **Raven Q&A demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/v2/benchmark_more.py
 
