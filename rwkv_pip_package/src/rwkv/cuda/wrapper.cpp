@@ -139,6 +139,11 @@ Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
                /* imm */ Tensor buf,
                /* out */ Tensor x_plus_out);
 
+Tensor ffn_one(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               /* imm */ Tensor buf,
+               /* out */ Tensor x_plus_out);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("wkv_forward", &wkv_forward, "wkv forward");
     m.def("mm8_seq", &mm8_seq, "mm8 seq");
@@ -147,6 +152,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("att_one", &att_one, "att one");
     m.def("att_seq", &att_seq, "att seq");
     m.def("ffn_seq", &ffn_seq, "ffn seq");
+    m.def("ffn_one", &ffn_one, "ffn one");
 }
 
 TORCH_LIBRARY(rwkv, m) {
@@ -157,4 +163,5 @@ TORCH_LIBRARY(rwkv, m) {
     m.def("att_one", att_one);
     m.def("att_seq", att_seq);
     m.def("ffn_seq", ffn_seq);
+    m.def("ffn_one", ffn_one);
 }
