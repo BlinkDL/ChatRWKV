@@ -4,20 +4,19 @@
 #include <cuda_runtime.h>
 #include <torch/extension.h>
 
-#define CUBLAS_CHECK(condition)                                             \
-  for (cublasStatus_t _cublas_check_status = (condition);                   \
-       _cublas_check_status != CUBLAS_STATUS_SUCCESS;)                      \
+#define CUBLAS_CHECK(condition)                                                \
+  for (cublasStatus_t _cublas_check_status = (condition);                      \
+       _cublas_check_status != CUBLAS_STATUS_SUCCESS;)                         \
     throw std::runtime_error("cuBLAS error " +                                 \
-                             std::to_string(_cublas_check_status) +         \
-                             " at " + std::to_string(__LINE__));
+                             std::to_string(_cublas_check_status) + " at " +   \
+                             std::to_string(__LINE__));
 
-#define CUDA_CHECK(condition)                                               \
-  for (cudaError_t _cuda_check_status = (condition);                        \
-       _cuda_check_status != cudaSuccess;)                                  \
+#define CUDA_CHECK(condition)                                                  \
+  for (cudaError_t _cuda_check_status = (condition);                           \
+       _cuda_check_status != cudaSuccess;)                                     \
     throw std::runtime_error(                                                  \
-        "CUDA error " +                                                        \
-        std::string(cudaGetErrorString(_cuda_check_status)) + " at " +      \
-        std::to_string(__LINE__));
+        "CUDA error " + std::string(cudaGetErrorString(_cuda_check_status)) +  \
+        " at " + std::to_string(__LINE__));
 
 cublasHandle_t get_cublas_handle() {
   static cublasHandle_t cublas_handle = []() {
@@ -48,10 +47,11 @@ void gemm_fp16_cublas(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
   std::swap(a, b);
   const cublasOperation_t cublas_trans_a = CUBLAS_OP_N;
   const cublasOperation_t cublas_trans_b = CUBLAS_OP_N;
-  // m = (B^T).size(0) = B.size(1), and = A.size(1) after swap
-  const int m = a.size(1);
-  const int k = a.size(0);
-  const int n = b.size(0);
+  // m = (B^T).size(0) = B.size(1), and = A.size(1) after swap,
+  // negative axis is used because of the existence of batch matmul.
+  const int m = a.size(-1);
+  const int k = a.size(-2);
+  const int n = b.size(-2);
   const int cublas_lda = m;
   const int cublas_ldb = k;
   const int cublas_ldc = m;
@@ -63,9 +63,24 @@ void gemm_fp16_cublas(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
   cublasGemmAlgo_t algo = CUBLAS_GEMM_DFALT_TENSOR_OP;
 #endif
   const float sp_beta = 0.f;
-  CUBLAS_CHECK(cublasGemmEx(
-      cublas_handle, cublas_trans_a, cublas_trans_b, m, n, k, &sp_alpha,
-      a.data_ptr(), cuda_data_type, cublas_lda, b.data_ptr(), cuda_data_type,
-      cublas_ldb, &sp_beta, c.data_ptr(), cuda_c_data_type, cublas_ldc,
-      compute_type, algo));
+  if (a.dense_dim() == 2 && b.dense_dim() == 2) {
+    CUBLAS_CHECK(cublasGemmEx(
+        cublas_handle, cublas_trans_a, cublas_trans_b, m, n, k, &sp_alpha,
+        a.data_ptr(), cuda_data_type, cublas_lda, b.data_ptr(), cuda_data_type,
+        cublas_ldb, &sp_beta, c.data_ptr(), cuda_c_data_type, cublas_ldc,
+        compute_type, algo));
+  } else {
+    // batch matmul
+    assert(a.dense_dim() == 3 && b.dense_dim() == 3);
+
+    const long long int cublas_stride_a = m * k;
+    const long long int cublas_stride_b = k * n;
+    const long long int cublas_stride_c = m * n;
+    CUBLAS_CHECK(cublasGemmStridedBatchedEx(
+        cublas_handle, cublas_trans_a, cublas_trans_b, m,
+        n, k, &sp_alpha, a.data_ptr(), cuda_data_type, cublas_lda,
+        cublas_stride_a, b.data_ptr(), cuda_data_type, cublas_ldb, cublas_stride_b,
+        &sp_beta, c.data_ptr(), cuda_c_data_type, cublas_ldc, cublas_stride_c,
+        a.size(0), compute_type, algo));
+  }
 }
