@@ -27,12 +27,24 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    load(
-        name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
-        verbose=True,
-        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
-        is_python_module=False)
+    try:
+        load(
+            name=f"wkv_cuda",
+            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
+            verbose=True,
+            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            is_python_module=False)
+        DISABLE_CUBLAS_GEMM = False
+    except:
+        print("Failed to build cuBLAS matmul, falling back to torch.matmul. Small model with fp16 will overflow.")
+        load(
+            name=f"wkv_cuda",
+            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
+            verbose=True,
+            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            extra_cflags=["-DDISABLE_CUBLAS_GEMM"],
+            is_python_module=False)
+        DISABLE_CUBLAS_GEMM = True
 
     @MyStatic
     def cuda_wkv(T: int, C: int, w, u, k, v, aa, bb, pp):
@@ -70,6 +82,10 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y.to(dtype=x.dtype)
+else:
+    os.environ["RWKV_CUDA_ON"] = '0'
+
+if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
     @MyStatic
     def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
@@ -92,7 +108,6 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         else:
             return (a @ b).to(output_dtype)
 else:
-    os.environ["RWKV_CUDA_ON"] = '0'
     def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
             output_dtype = a.dtype

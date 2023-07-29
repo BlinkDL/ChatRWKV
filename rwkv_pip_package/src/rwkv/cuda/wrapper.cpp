@@ -118,18 +118,24 @@ void mm8_one(int64_t N, int64_t M,
 
 using torch::Tensor;
 
+#ifndef DISABLE_CUBLAS_GEMM
 void gemm_fp16_cublas(Tensor a, Tensor b, Tensor c);
+#endif
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("wkv_forward", &wkv_forward, "wkv forward");
     m.def("mm8_seq", &mm8_seq, "mm8 seq");
     m.def("mm8_one", &mm8_one, "mm8 one");
+#ifndef DISABLE_CUBLAS_GEMM
     m.def("gemm_fp16_cublas", &gemm_fp16_cublas, "gemv fp16 cublas");
+#endif
 }
 
 TORCH_LIBRARY(rwkv, m) {
     m.def("wkv_forward", wkv_forward);
     m.def("mm8_seq", mm8_seq);
     m.def("mm8_one", mm8_one);
+#ifndef DISABLE_CUBLAS_GEMM
     m.def("gemm_fp16_cublas", gemm_fp16_cublas);
+#endif
 }
