@@ -582,10 +582,10 @@ class RWKV(MyModule):
         S = x.shape[-1] // H
 
         r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
-        k = gemm(kx, kw).view(H, S, 1)
-        v = gemm(vx, vw).view(H, 1, S)
+        k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
+        v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
         
-        a = gemm(k, v, output_dtype=torch.float32)
+        a = gemm(k, v)
         out = r @ (t_first * a + s)
         s = a + t_decay * s
 
