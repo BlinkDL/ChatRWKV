@@ -27,12 +27,24 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
-    load(
-        name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
-        verbose=True,
-        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
-        is_python_module=False)
+    try:
+        load(
+            name=f"wkv_cuda",
+            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
+            verbose=True,
+            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            is_python_module=False)
+        DISABLE_CUBLAS_GEMM = False
+    except:
+        print("Failed to build cuBLAS matmul, falling back to torch.matmul. Small model with fp16 will overflow.")
+        load(
+            name=f"wkv_cuda",
+            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
+            verbose=True,
+            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            extra_cflags=["-DDISABLE_CUBLAS_GEMM"],
+            is_python_module=False)
+        DISABLE_CUBLAS_GEMM = True
 
     @MyStatic
     def cuda_wkv(T: int, C: int, w, u, k, v, aa, bb, pp):
@@ -70,23 +82,32 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
         y = torch.zeros((M,), device=w.device, dtype=torch.float32)
         torch.ops.rwkv.mm8_one(N, M, x, w, mx, rx, my, ry, y)
         return y.to(dtype=x.dtype)
+else:
+    os.environ["RWKV_CUDA_ON"] = '0'
+
+if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
     @MyStatic
     def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
             output_dtype = a.dtype
         if a.dtype == b.dtype == torch.float16 and a.device.type == 'cuda':
-            assert len(b.shape) == 2
             if len(a.shape) == 1:
+                assert len(b.shape) == 2
                 c = torch.empty((b.shape[-1],), dtype=output_dtype, device=a.device)
                 a = a.unsqueeze(0)
             else:
-                c = torch.empty((a.shape[0], b.shape[-1]), dtype=output_dtype, device=a.device)
+                assert len(a.shape) == len(b.shape)
+                assert len(a.shape) == 2 or len(a.shape) == 3
+                # torch.empty((*a.shape[:-1], b.shape[-1])) doesn't work with jit
+                if len(a.shape) == 2:
+                    c = torch.empty((a.shape[0], b.shape[-1]), dtype=output_dtype, device=a.device)
+                else:
+                    c = torch.empty((a.shape[0], a.shape[1], b.shape[-1]), dtype=output_dtype, device=a.device)
             torch.ops.rwkv.gemm_fp16_cublas(a, b, c)
             return c
         else:
             return (a @ b).to(output_dtype)
 else:
-    os.environ["RWKV_CUDA_ON"] = '0'
     def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
             output_dtype = a.dtype
@@ -261,6 +282,8 @@ class RWKV(MyModule):
                             w[x] = w[x].float()
                         elif self.version == 5:
                             w[x] = torch.exp(w[x].float()).reshape(-1,1,1)
+                    elif '.ln_x' in x: # need fp32 for group_norm
+                        w[x] = w[x].float()
                     else:
                         if (len(w[x].shape) == 2) and ('emb' not in x):
                             if WTYPE != torch.uint8:
@@ -558,16 +581,17 @@ class RWKV(MyModule):
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        r = gemm(rx, rw).view(H, 1, S)
+        r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
         k = gemm(kx, kw).view(H, S, 1)
         v = gemm(vx, vw).view(H, 1, S)
         
-        a = (k @ v).float()
-        out = r @ (t_first * a + s).to(dtype=r.dtype)
+        a = gemm(k, v, output_dtype=torch.float32)
+        out = r @ (t_first * a + s)
         s = a + t_decay * s
 
         out = out.flatten()
         out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b).squeeze(0)
+        out = out.to(dtype=x.dtype)
         out = gemm(out, ow)
 
         return x + out, xx, s
@@ -597,16 +621,16 @@ class RWKV(MyModule):
         w = w[:, :-T].reshape(-1, T, 2 * T - 1)
         w = w[:, :, T-1:].reshape(H, T, T)
 
-        r = gemm(rx, rw).view(T, H, S).transpose(0, 1).float()
-        k = gemm(kx, kw).view(T, H, S).transpose(0, 1).transpose(-2, -1).float()
-        v = gemm(vx, vw).view(T, H, S).transpose(0, 1).float()
+        r = gemm(rx, rw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        k = gemm(kx, kw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
+        v = gemm(vx, vw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
 
         out = ((r @ k) * w) @ v + (r @ s) * wb
         s = ws * s + (k * wk) @ v
         
-        out = out.to(dtype=x.dtype)
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = out.to(dtype=x.dtype)
         out = gemm(out, ow)
 
         return x + out, xx[-1,:], s
