@@ -597,13 +597,14 @@ class RWKV(MyModule):
         w = w[:, :-T].reshape(-1, T, 2 * T - 1)
         w = w[:, :, T-1:].reshape(H, T, T)
 
-        r = gemm(rx, rw).view(T, H, S).transpose(0, 1)
-        k = gemm(kx, kw).view(T, H, S).transpose(0, 1).transpose(-2, -1)
-        v = gemm(vx, vw).view(T, H, S).transpose(0, 1)
+        r = gemm(rx, rw).view(T, H, S).transpose(0, 1).float()
+        k = gemm(kx, kw).view(T, H, S).transpose(0, 1).transpose(-2, -1).float()
+        v = gemm(vx, vw).view(T, H, S).transpose(0, 1).float()
 
         out = ((r @ k) * w) @ v + (r @ s) * wb
         s = ws * s + (k * wk) @ v
         
+        out = out.to(dtype=x.dtype)
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
         out = gemm(out, ow)
