@@ -88,7 +88,9 @@ class PIPELINE():
         out_last = 0
         out_str = ''
         occurrence = {}
-        for i in range(token_count):
+        continue_generating = True
+        i = 0
+        while continue_generating:
 
             # forward & adjust prob.
             tokens = self.encode(ctx) if i == 0 else [token]
@@ -103,8 +105,8 @@ class PIPELINE():
             
             # sampler
             token = self.sample_logits(out, temperature=args.temperature, top_p=args.top_p, top_k=args.top_k)
-            if token in args.token_stop:
-                break
+            if len(args.token_stop) > 0 and args.token_stop==all_tokens[-len(args.token_stop):]:
+                continue_generating = False
             all_tokens += [token]
             for xxx in occurrence:
                 occurrence[xxx] *= args.alpha_decay
@@ -121,4 +123,7 @@ class PIPELINE():
                     callback(tmp)
                 out_str += tmp
                 out_last = i + 1
+            i += 1
+            if i >= token_count:
+                continue_generating = False
         return out_str
