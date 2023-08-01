@@ -18,10 +18,7 @@ models = [args.model]
 
 strategies = ['fp16', 'fp32', 'fp16i8']
 
-columns = ['Device']
-for strategy in strategies:
-    columns.append(f'{strategy} latency')
-    columns.append(f'{strategy} memory')
+columns = ['Device'] + strategies
 
 local_device = '2080'
 
@@ -30,12 +27,16 @@ vast_id = {}
 vast_dev_names = {'1080': 'GTX_1080', '2080': 'RTX_2080', '3080': 'RTX_3080', '4090': 'RTX_4090'}
 
 
+class NoInstanceError(RuntimeError):
+    pass
+
+
 def prepare_vastai_env(device: str):
     vast_device_name = vast_dev_names[device]
     output = check_output(["vastai", "search", "offers", f"gpu_name={vast_device_name} cuda_vers>=11.8", "--raw"], args.verbose)
     output = json.loads(output)
     if len(output) == 0:
-        raise RuntimeError(f"No Vast.ai offers found for {device}")
+        raise NoInstanceError(f"No Vast.ai offers found for {device}")
     best = output[0]["id"]
     print(f"Found best offer {best}")
     output = check_output(f"vastai create instance {best} --image daquexian/cuda-pytorch:cu118-dev-2.0.1 --disk 32 --raw".split(), args.verbose)
@@ -46,17 +47,9 @@ def prepare_vastai_env(device: str):
     while not flag:
         time.sleep(10)
         print("Checking status..")
-        try:
-            print('-'*30)
-            print('-'*30)
-            print('-'*30)
-            output = check_output(f"vastai show instances --raw".split(), args.verbose)
-            print('-'*30)
-            print('-'*30)
-            print('-'*30)
-            output = json.loads(output)
-        except:
-            import pdb; pdb.set_trace()
+        # too verbose
+        output = check_output(f"vastai show instances --raw".split(), False)
+        output = json.loads(output)
         for instance in output:
             if instance["id"] == instance_id:
                 print(f"Instance {instance_id} is {instance['actual_status']}")
@@ -103,18 +96,19 @@ def check_output(command, print_output):
     return stdout.strip()
 
 
-for device in ['3080', '1080', 'cpu', '2080']:
+for device in ['4090', '3080', '1080', 'cpu', '2080']:
     if device in ['cpu', local_device]:
         ssh_prefix = []
         ssh_dir = ''
     else:
         try:
             ssh_prefix = prepare_vastai_env(device)
+        except NoInstanceError:
+            print(f"No instance found for {device}, skipping")
+            continue
         except Exception as e:
             traceback.print_exc()
-            print(f"No instance found for {device}, skipping")
             import pdb; pdb.set_trace()
-            continue
         ssh_dir = 'ChatRWKV/'
     device_type = 'cpu' if device == 'cpu' else 'cuda'
     for model in models:
@@ -123,17 +117,15 @@ for device in ['3080', '1080', 'cpu', '2080']:
         data = [device]
         for strategy in strategies:
             try:
-                time = 99999999999
+                latency = 99999999999
                 for _ in range(args.n):
                     command = [*ssh_prefix, 'python3', f'{ssh_dir}v2/benchmark-me.py', '--model', f'{ssh_dir}{model}', '--strategy', f'{device_type}@{strategy}', '--custom-cuda-op', '--jit', '--only-slow']
                     print(f'Running: {" ".join(command)}')
                     output = check_output(command, print_output=args.verbose)
-                    time = min(time, float(output.splitlines()[-2].split(' ')[2][:-2]))
+                    latency = min(latency, float(output.splitlines()[-2].split(' ')[2][:-2]))
                     mem = float(output.splitlines()[-1].split(' ')[-2])
-                data.append(f'{time * 1000:.0f}ms')
-                data.append(f'{mem:.0f}MB') # type: ignore[reportUnboundVariable]
+                data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB') # type: ignore[reportUnboundVariable]
             except:
-                data.append('N/A')
                 data.append('N/A')
                 print(f'Failed to run {model} on {device} with {strategy}')
         table.add_data(*data)
