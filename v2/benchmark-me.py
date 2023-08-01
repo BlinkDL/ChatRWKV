@@ -20,6 +20,8 @@ parser.add_argument('--only-fast', action='store_true')
 parser.add_argument('--only-slow', action='store_true')
 parser.add_argument('--nsys-profiler', action='store_true')
 args = parser.parse_args()
+args.strategy = args.strategy.replace("@", " ")
+print(f'strategy is {args.strategy}')
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 import numpy as np
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
@@ -148,7 +150,7 @@ print(f'Token num: {len(init_token)}')
 for i in range(10):
     if not args.only_slow:
         time_ref = time.time_ns()
-        g.replay()
+        out, state = model.forward(init_token, None)
         aa = out.detach().cpu().numpy()
         # warmup the jit
         if i == 0:
@@ -160,7 +162,7 @@ for i in range(10):
     if not args.only_fast:
         time_ref = time.time_ns()
         for j in range(len(init_token)):
-            out, state = model.forward([444], None if j == 0 else state)
+            out, state = model.forward([init_token[j]], None if j == 0 else state)
         aa = out.detach().cpu().numpy()
         record_time('slow')
         ts = time_slot['slow']

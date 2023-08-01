@@ -638,7 +638,6 @@ class RWKV(MyModule):
 
             if state == None:
                 state = [None] * args.n_layer * 5
-                import pdb; pdb.set_trace()
                 for i in range(args.n_layer): # state: 0=att_xx 1=att_aa 2=att_bb 3=att_pp 4=ffn_xx
                     dd = self.strategy[i]
                     dev = dd.device
