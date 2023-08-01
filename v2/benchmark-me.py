@@ -162,7 +162,6 @@ for i in range(10):
         for j in range(len(init_token)):
             out, state = model.forward([444], None if j == 0 else state)
         aa = out.detach().cpu().numpy()
-        import pdb; pdb.set_trace()
         record_time('slow')
         ts = time_slot['slow']
         print(f"slow min {round(min(ts), 4)}s, avg {round(avg(ts), 4)}s {aa}")

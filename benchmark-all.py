@@ -16,7 +16,7 @@ args = parser.parse_args()
 
 models = [args.model]
 
-strategies = ['fp16', 'fp32', 'fp16i8']
+strategies = ['bf16', 'fp16', 'fp32', 'fp16i8']
 
 columns = ['Device'] + strategies
 
@@ -96,7 +96,7 @@ def check_output(command, print_output):
     return stdout.strip()
 
 
-for device in ['4090', '3080', '1080', 'cpu', '2080']:
+for device in ['4090', '3080', '2080', '1080', 'cpu']:
     if device in ['cpu', local_device]:
         ssh_prefix = []
         ssh_dir = ''
@@ -107,8 +107,8 @@ for device in ['4090', '3080', '1080', 'cpu', '2080']:
             print(f"No instance found for {device}, skipping")
             continue
         except Exception as e:
-            traceback.print_exc()
             import pdb; pdb.set_trace()
+            traceback.print_exc()
         ssh_dir = 'ChatRWKV/'
     device_type = 'cpu' if device == 'cpu' else 'cuda'
     for model in models:
@@ -116,18 +116,19 @@ for device in ['4090', '3080', '1080', 'cpu', '2080']:
             scp(model, f'ChatRWKV/{model}', vast_id[device][0], vast_id[device][1])
         data = [device]
         for strategy in strategies:
-            try:
-                latency = 99999999999
-                for _ in range(args.n):
-                    command = [*ssh_prefix, 'python3', f'{ssh_dir}v2/benchmark-me.py', '--model', f'{ssh_dir}{model}', '--strategy', f'{device_type}@{strategy}', '--custom-cuda-op', '--jit', '--only-slow']
-                    print(f'Running: {" ".join(command)}')
-                    output = check_output(command, print_output=args.verbose)
-                    latency = min(latency, float(output.splitlines()[-2].split(' ')[2][:-2]))
-                    mem = float(output.splitlines()[-1].split(' ')[-2])
-                data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB') # type: ignore[reportUnboundVariable]
-            except:
-                data.append('N/A')
-                print(f'Failed to run {model} on {device} with {strategy}')
+            for mode in ['slow']:
+                try:
+                    latency = 99999999999
+                    for _ in range(args.n):
+                        command = [*ssh_prefix, 'python3', f'{ssh_dir}v2/benchmark-me.py', '--model', f'{ssh_dir}{model}', '--strategy', f'{device_type}@{strategy}', '--custom-cuda-op', '--jit', f'--only-{mode}']
+                        print(f'Running: {" ".join(command)}')
+                        output = check_output(command, print_output=args.verbose)
+                        latency = min(latency, float(output.splitlines()[-2].split(' ')[2][:-2]))
+                        mem = float(output.splitlines()[-1].split(' ')[-2])
+                    data.append(f'{latency * 1000:.0f}ms/{mem:.0f}MB') # type: ignore[reportUnboundVariable]
+                except:
+                    data.append('N/A')
+                    print(f'Failed to run {model} on {device} with {strategy}')
         table.add_data(*data)
     if device in vast_id:
         check_output(['vastai', 'destroy', 'instance', str(vast_id[device][2])], args.verbose)
