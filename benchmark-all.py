@@ -6,6 +6,7 @@ import argparse
 import json
 import time
 import traceback
+import os
 
 parser = argparse.ArgumentParser(description='Run benchmark')
 parser.add_argument('--branch', type=str, help='branch of ChatRWKV', default='main')
@@ -70,7 +71,7 @@ def prepare_vastai_env(device: str):
     check_output(ssh_prefix + 'pip install numpy'.split(), args.verbose)
     check_output(ssh_prefix + 'apt install ninja-build'.split(), args.verbose)
 
-    scp('v2/benchmark-me.py', f'ChatRWKV/v2/benchmark-me.py', vast_id[device][0], vast_id[device][1])
+    scp('benchmark-custom.py', f'ChatRWKV/v2/benchmark-custom.py', vast_id[device][0], vast_id[device][1])
     return ssh_prefix
 
 
@@ -99,7 +100,7 @@ def check_output(command, print_output):
 for device in ['4090', '3080', '2080', '1080', 'cpu']:
     if device in ['cpu', local_device]:
         ssh_prefix = []
-        ssh_dir = ''
+        project_dir = os.path.expanduser('~/files/repos/ChatRWKV')
     else:
         try:
             ssh_prefix = prepare_vastai_env(device)
@@ -109,7 +110,7 @@ for device in ['4090', '3080', '2080', '1080', 'cpu']:
         except Exception as e:
             import pdb; pdb.set_trace()
             traceback.print_exc()
-        ssh_dir = 'ChatRWKV/'
+        project_dir = 'ChatRWKV/'
     device_type = 'cpu' if device == 'cpu' else 'cuda'
     for model in models:
         if device in vast_id:
@@ -120,7 +121,7 @@ for device in ['4090', '3080', '2080', '1080', 'cpu']:
                 try:
                     latency = 99999999999
                     for _ in range(args.n):
-                        command = [*ssh_prefix, 'python3', f'{ssh_dir}v2/benchmark-me.py', '--model', f'{ssh_dir}{model}', '--strategy', f'{device_type}@{strategy}', '--custom-cuda-op', '--jit', f'--only-{mode}']
+                        command = [*ssh_prefix, 'python3', f'{project_dir}v2/benchmark-custom.py', '--model', f'{project_dir}{model}', '--strategy', f'{device_type}@{strategy}', '--custom-cuda-op', '--jit', f'--only-{mode}']
                         print(f'Running: {" ".join(command)}')
                         output = check_output(command, print_output=args.verbose)
                         latency = min(latency, float(output.splitlines()[-2].split(' ')[2][:-2]))
