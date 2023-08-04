@@ -63,7 +63,7 @@ void gemm_fp16_cublas(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
   cublasGemmAlgo_t algo = CUBLAS_GEMM_DFALT_TENSOR_OP;
 #endif
   const float sp_beta = 0.f;
-  if (a.dense_dim() == 2 && b.dense_dim() == 2) {
+  if (a.sizes().size() == 2 && b.sizes().size() == 2) {
     CUBLAS_CHECK(cublasGemmEx(
         cublas_handle, cublas_trans_a, cublas_trans_b, m, n, k, &sp_alpha,
         a.data_ptr(), cuda_data_type, cublas_lda, b.data_ptr(), cuda_data_type,
@@ -71,7 +71,7 @@ void gemm_fp16_cublas(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
         compute_type, algo));
   } else {
     // batch matmul
-    assert(a.dense_dim() == 3 && b.dense_dim() == 3);
+    assert(a.sizes().size() == 3 && b.sizes().size() == 3);
 
     const long long int cublas_stride_a = m * k;
     const long long int cublas_stride_b = k * n;
