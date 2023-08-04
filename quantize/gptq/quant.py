@@ -128,6 +128,7 @@ class Quantizer(nn.Module):
     def ready(self):
         return torch.all(self.scale != 0)
 
+
 try:
     import quant_cuda
     is_cuda = True
@@ -322,12 +323,24 @@ class QuantLinear_custom(nn.Module):
                 weight = torch.cat([weight[:,0,:11], weight[:,1,1:12], weight[:,2,1:11]], dim=1)
                     
              weight = weight.reshape(weight.shape[0] * weight.shape[1], weight.shape[2])
-                    
-             weights = (self.scales[self.g_idx] * (weight - zeros[self.g_idx]))
+             num_itr = self.g_idx.shape[0]//x.shape[-1]
+             if num_itr == 1:
+                 weights = (self.scales[self.g_idx.long()] * (weight - zeros[self.g_idx.long()]))
+             else:
+                 num_dim = self.g_idx.shape[0]//num_itr
+                 weights = []
+                 for i in range(num_itr):
+                     scale_i = self.scales[:,i*num_dim:(i+1)*num_dim]
+                     weight_i = weight[:,i*num_dim:(i+1)*num_dim]
+                     zeros_i = zeros[:,i*num_dim:(i+1)*num_dim]
+                     g_idx_i = self.g_idx[i*num_dim:(i+1)*num_dim]
+                     weights.append(scale_i[g_idx_i.long()] * (weight_i - zeros_i[g_idx_i.long()]))
+                 weights = torch.cat(weights,dim=1)
              out = torch.matmul(x.half(), weights)
         out = out.reshape(out_shape)
         out = out + self.bias if self.bias is not None else out
         return out
+
 
 class QuantLinear(nn.Module): 
     def __init__(self, bits, groupsize, infeatures, outfeatures, bias, kernel_switch_threshold=128, is_cuda=is_cuda):
@@ -491,9 +504,21 @@ class QuantLinear(nn.Module):
                 weight = torch.cat([weight[:,0,:11], weight[:,1,1:12], weight[:,2,1:11]], dim=1)
                     
              weight = weight.reshape(weight.shape[0] * weight.shape[1], weight.shape[2])
-                    
-             weights = (self.scales[self.g_idx] * (weight - zeros[self.g_idx]))
+             num_itr = self.g_idx.shape[0]//x.shape[-1]
+             if num_itr == 1:
+                 weights = (self.scales[self.g_idx.long()] * (weight - zeros[self.g_idx.long()]))
+             else:
+                 num_dim = self.g_idx.shape[0]//num_itr
+                 weights = []
+                 for i in range(num_itr):
+                     scale_i = self.scales[:,i*num_dim:(i+1)*num_dim]
+                     weight_i = weight[:,i*num_dim:(i+1)*num_dim]
+                     zeros_i = zeros[:,i*num_dim:(i+1)*num_dim]
+                     g_idx_i = self.g_idx[i*num_dim:(i+1)*num_dim]
+                     weights.append(scale_i[g_idx_i.long()] * (weight_i - zeros_i[g_idx_i.long()]))
+                 weights = torch.cat(weights,dim=1)
              out = torch.matmul(x.half(), weights)
         out = out.reshape(out_shape)
         out = out + self.bias if self.bias is not None else out
         return out
+    

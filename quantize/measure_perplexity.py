@@ -2,14 +2,15 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset
-# from myRWKV import RWKV
-from rwkv.model import RWKV
+from myRWKV import RWKV
+# from rwkv.model import RWKV
 import torch.nn as nn
 
 device = "cpu"
 
 # Model
 model = RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
+# model = RWKV("./1sample_quantized.pth", strategy='cpu fp32')
 # Dataset
 tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-4-169m-pile")
 # sentence = "My name is Bob"

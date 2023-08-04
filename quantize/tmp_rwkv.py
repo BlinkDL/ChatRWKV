@@ -52,6 +52,9 @@ class GPTQ_RWKV(RWKV):
             self.H += inp.matmul(inp.t())
 
         def fasterquant(self, blocksize=128, percdamp=.01, groupsize=-1, actorder=False):
+            # if self.name == "blocks.0.ffn.value.weight":
+            # if self.name == "blocks.0.ffn.key.weight":
+                # import pdb; pdb.set_trace()
             W = self.weight.data.clone()
             # OLD: Need to transpose here, same reason as in __init__ with self.columns
             # UPDATE: no need to tranpose as we already transpose in my_linear()
@@ -120,7 +123,6 @@ class GPTQ_RWKV(RWKV):
                     ).flatten()
                     Q1[:, i] = q
                     Losses1[:, i] = (w - q) ** 2 / d ** 2
-
                     err1 = (w - q) / d
                     W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
                     Err1[:, i] = err1
@@ -164,9 +166,9 @@ class GPTQ_RWKV(RWKV):
         # Keep only layer within block layer_id
 
         #TODO: Uncomment me when quantizing 1 layer works
-        # is_weight = re.compile(f'^blocks\.{layer_id}\..*\.weight$')
-        is_weight = re.compile("blocks.0.att.key.weight")
-        for name in self.w.keys():                
+        is_weight = re.compile(f'^blocks\.{layer_id}\..*\.weight$')
+        # is_weight = re.compile("blocks.0.att.key.weight")
+        for name in self.w.keys():
             if is_weight.match(name):
                 if len(self.w[name].shape) == 1: continue #TODO: Skip 1D tensors for now
                 self.subset[name] = self.w[name]
@@ -211,16 +213,15 @@ class GPTQ_RWKV(RWKV):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        # r = torch.sigmoid(rx @ rw.weight)
-        r = torch.sigmoid(rx @ rw)
-        # rw.add_batch(rx)
+        # r = torch.sigmoid(rx @ rw)
+        # v = (vx @ vw).float()
 
+        r = torch.sigmoid(rx @ rw.weight)
+        rw.add_batch(rx)
         k = (kx @ kw.weight).float()
         kw.add_batch(kx)
-
-        # v = (vx @ vw.weight).float()
-        v = (vx @ vw).float()
-        # vw.add_batch(vx)
+        v = (vx @ vw.weight).float()
+        vw.add_batch(vx)
 
         ww = t_first + k
         p = torch.maximum(pp, ww)
@@ -232,9 +233,9 @@ class GPTQ_RWKV(RWKV):
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
 
-        # out = (r * wkv) @ ow.weight
-        out = (r * wkv) @ ow
-        # ow.add_batch(r * wkv)
+        # out = (r * wkv) @ ow
+        out = (r * wkv) @ ow.weight
+        ow.add_batch(r * wkv)
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
     
     def att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
@@ -244,14 +245,16 @@ class GPTQ_RWKV(RWKV):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        # r = torch.sigmoid(rx @ rw.weight)
-        r = torch.sigmoid(rx @ rw)
-        # rw.add_batch(rx)
+        # r = torch.sigmoid(rx @ rw)
+        # k = (kx @ kw).float()
+        # v = (vx @ vw).float()
+
+        r = torch.sigmoid(rx @ rw.weight)
+        rw.add_batch(rx)
         k = (kx @ kw.weight).float()
         kw.add_batch(kx)
-        # v = (vx @ vw.weight).float()
-        v = (vx @ vw).float()
-        # vw.add_batch(vx)
+        v = (vx @ vw.weight).float()
+        vw.add_batch(vx)
 
         T = x.shape[0]
         for t in range(T):
@@ -269,9 +272,9 @@ class GPTQ_RWKV(RWKV):
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-        # out = (r * sx) @ ow.weight
-        out = (r * sx) @ ow
-        # ow.add_batch(r * sx)
+        # out = (r * sx) @ ow
+        out = (r * sx) @ ow.weight
+        ow.add_batch(r * sx)
         return x + out, xx[-1,:], aa, bb, pp
 
     def ffn_one(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -279,15 +282,17 @@ class GPTQ_RWKV(RWKV):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        # r = torch.sigmoid(rx @ rw.weight)
-        r = torch.sigmoid(rx @ rw)
-        # rw.add_batch(rx)
-        # vx = torch.square(torch.relu(kx @ kw.weight))
-        vx = torch.square(torch.relu(kx @ kw))
-        # kw.add_batch(kx)
-        # out = r * (vx @ vw.weight)
-        out = r * (vx @ vw)
-        # vw.add_batch(vx)
+        # r = torch.sigmoid(rx @ rw)
+        # vx = torch.square(torch.relu(kx @ kw))
+        # out = r * (vx @ vw)
+                
+        r = torch.sigmoid(rx @ rw.weight)
+        rw.add_batch(rx)
+        vx = torch.square(torch.relu(kx @ kw.weight))
+        kw.add_batch(kx)
+        out = r * (vx @ vw.weight)
+        vw.add_batch(vx)
+
         return x + out, xx
 
     def ffn_seq(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
@@ -296,15 +301,16 @@ class GPTQ_RWKV(RWKV):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        # r = torch.sigmoid(rx @ rw.weight)
-        r = torch.sigmoid(rx @ rw)
-        # rw.add_batch(rx)
-        # vx = torch.square(torch.relu(kx @ kw.weight))
-        vx = torch.square(torch.relu(kx @ kw))
-        # kw.add_batch(kx)
-        # out = r * (vx @ vw.weight)
-        out = r * (vx @ vw)
-        # vw.add_batch(vx)
+        # r = torch.sigmoid(rx @ rw)
+        # vx = torch.square(torch.relu(kx @ kw))
+        # out = r * (vx @ vw)
+
+        r = torch.sigmoid(rx @ rw.weight)
+        rw.add_batch(rx)
+        vx = torch.square(torch.relu(kx @ kw.weight))
+        kw.add_batch(kx)
+        out = r * (vx @ vw.weight)
+        vw.add_batch(vx)
         return x + out, xx[-1,:]
 
     def forward_block(self, x, state, i, seq_mode, full_output=False):
@@ -343,12 +349,14 @@ class GPTQ_RWKV(RWKV):
             x = x.to(dtype=atype, device=dev)
 
             kw = self.gptq[f'{att}key.weight']
-            # vw = self.gptq[f'{att}value.weight']
-            vw = self.w[f'{att}value.weight']
-            # rw = self.gptq[f'{att}receptance.weight']
-            rw = self.w[f'{att}receptance.weight']
-            # ow = self.gptq[f'{att}output.weight']
-            ow = self.w[f'{att}output.weight']
+            vw = self.gptq[f'{att}value.weight']
+            rw = self.gptq[f'{att}receptance.weight']
+            ow = self.gptq[f'{att}output.weight']
+
+            # kw = self.w[f'{att}key.weight']
+            # vw = self.w[f'{att}value.weight']
+            # rw = self.w[f'{att}receptance.weight']
+            # ow = self.w[f'{att}output.weight']
 
             if dd.stream:
                 kw = kw.to(device=dev, non_blocking=True)
@@ -388,12 +396,13 @@ class GPTQ_RWKV(RWKV):
             if dd.stream:
                 del kw, vw, rw, ow
 
-            # kw = self.gptq[f'{ffn}key.weight']
-            kw = self.w[f'{ffn}key.weight']
-            # vw = self.gptq[f'{ffn}value.weight']
-            vw = self.w[f'{ffn}value.weight']
-            # rw = self.gptq[f'{ffn}receptance.weight']
-            rw = self.w[f'{ffn}receptance.weight']
+            # kw = self.w[f'{ffn}key.weight']
+            # vw = self.w[f'{ffn}value.weight']
+            # rw = self.w[f'{ffn}receptance.weight']
+
+            kw = self.gptq[f'{ffn}key.weight']
+            vw = self.gptq[f'{ffn}value.weight']
+            rw = self.gptq[f'{ffn}receptance.weight']
 
             if dd.stream:
                 kw = kw.to(device=dev, non_blocking=True)
@@ -412,6 +421,7 @@ class GPTQ_RWKV(RWKV):
             rrx = self.w[f'{ffn}receptance.weight_rx'] if wtype == torch.uint8 else x
             rmy = self.w[f'{ffn}receptance.weight_my'] if wtype == torch.uint8 else x
             rry = self.w[f'{ffn}receptance.weight_ry'] if wtype == torch.uint8 else x
+
             x, state[i*5+4] = FFN(
                 x=x, sx=state[i*5+4],
                 ln_w=self.w[f'{bbb}ln2.weight'], ln_b=self.w[f'{bbb}ln2.bias'],
@@ -466,8 +476,7 @@ def quantize_gptq_custom(model, tokens):
         model.alloc_gptq(layer_id)
 
         for i in range(nsamples):
-            #TODO: Are outs value normal ? (they look almost all the same)
-            if not is_last_layer(layer_id):
+            if not is_last_layer(layer_id):    
                 outs[i] = model.forward_block(inps[i], state=None, i=layer_id, seq_mode=seq_mode)
             else:
                 _ = model.forward_block(inps[i], state=None, i=layer_id, seq_mode=seq_mode)
@@ -476,6 +485,7 @@ def quantize_gptq_custom(model, tokens):
             gptq_layer.deactivate_add_batch_call = True
 
         model.fasterquant(layer_id, quantizers)
+        # model.gptq["blocks.0.ffn.value.weight"].weight
 
         for i in range(nsamples):
             if not is_last_layer(layer_id):
@@ -532,16 +542,15 @@ def model_pack_custom(model, quantizers, wbits, groupsize):
     print('Done.')
     return model
 
-
 if __name__ == "__main__":
 
-    model_ref = GPTQ_RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
     model = GPTQ_RWKV("./RWKV-4-Pile-169M-20220807-8023.pth", strategy='cpu fp32')
 
-    NSAMPLES=1
+    NSAMPLES=128
     HIDDEN_SIZE=model.args.n_embd
     SEQLEN=1024 # cf https://huggingface.co/BlinkDL/rwkv-4-pile-169m
 
+    print("Loading data ...")
     train_tokens, test_tokens = get_loaders(
         dataset_name="wikitext2",
         nsamples=NSAMPLES,
@@ -551,28 +560,13 @@ if __name__ == "__main__":
     )
 
     tokens = torch.cat([inp for inp, _ in train_tokens], dim=0)
-    tokens = torch.zeros((NSAMPLES, SEQLEN), dtype=torch.int64)
     print("tokens.shape", tokens.shape)
     
+    print("Quantizing ...")
     quantizers = quantize_gptq_custom(model, tokens)
     model = model_pack_custom(model, quantizers, WBITS, GROUPSIZE)
+    print("Saving ...")
     torch.save([model.w_quant, model.w], "1sample_quantized.pth")
     
-    # Make sure only 1 layer was quantized
-    assert len(model.w_quant.keys()) == 1 and "blocks.0.att.key.weight" in model.w_quant.keys()
-
-    for (ref_key, ref_value), (key, value) in zip(model_ref.w.items(), model.w.items()):
-        if key != "blocks.0.att.key.weight":
-            assert torch.allclose(ref_value, value, atol=1e-5)
-        else:
-            assert not torch.allclose(ref_value, value, atol=1e-5)
 
     print("Done Custom GPTQ")
-
-    # I have noticed QuantLinear.forward() can be divded in 2 parts:
-    # 1. Quantize the weights (using info from model.w_quant thanks to QuantLinear.pack())
-    # 2. Perform x @ weights
-    # We can load checkpoint  RWKV of base class with model_w (which are quantized but doesnt have the scale, zero info)
-    # Then, if isinstancce(model, w_quant) exist, we load this dict as well
-    # Each time the weights are called, we do a trigger() by checking if isinstancce(moded.w_quant is QuantLinear) 
-    # This way, we can reuse RWKV base class with minimal change 

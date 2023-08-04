@@ -99,6 +99,7 @@ class RWKV(MyModule):
         prxxx(f'Loading {args.MODEL_NAME} ...')
         with torch.no_grad():
             obj = torch.load(args.MODEL_NAME, map_location='cpu') # load model to CPU first
+            import pdb; pdb.set_trace()
             if isinstance(obj, list): # GPTQ
                 self.w_quant = obj[0]
                 self.w = obj[1]
@@ -349,11 +350,11 @@ class RWKV(MyModule):
             N, M = w.shape[0], w.shape[1]
             return cuda_mm8_one(N, M, x, w, mx, rx, my, ry)
     else:
-        @MyFunction
+        # @MyFunction
         def mm8_seq(self, x, w, mx, rx, my, ry):
             return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
 
-        @MyFunction
+        # @MyFunction
         def mm8_one(self, x, w, mx, rx, my, ry):
             return x @ ((w.to(dtype=x.dtype) + 0.5) * ry * rx + my + mx)
 
@@ -366,10 +367,10 @@ class RWKV(MyModule):
         rx = xx * r_mix + sx * (1 - r_mix)
 
         # r = torch.sigmoid(rx @ rw)
-        r = torch.sigmoid(self._trigger_gptq(rx, weight=rw[0], name=rw[1]))
         # vx = torch.square(torch.relu(kx @ kw))
-        vx = torch.square(torch.relu(self._trigger_gptq(kx, weight=kw[0], name=kw[1])))
         # out = r * (vx @ vw)
+        r = torch.sigmoid(self._trigger_gptq(rx, weight=rw[0], name=rw[1]))
+        vx = torch.square(torch.relu(self._trigger_gptq(kx, weight=kw[0], name=kw[1])))
         out = r * (self._trigger_gptq(vx, weight=vw[0], name=vw[1]))
         return x + out, xx
 
@@ -501,7 +502,7 @@ class RWKV(MyModule):
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-        # out = (r * sx) @ ow
+        out = (r * sx) @ ow
         out = self._trigger_gptq(r * sx, weight=ow[0], name=ow[1])
         return x + out, xx[-1,:], aa, bb, pp
 
@@ -590,17 +591,29 @@ class RWKV(MyModule):
                 torch.bitwise_and(zeros, (2 ** w_quant.bits) - 1, out=zeros)
                     
                 zeros = zeros + 1
-                # if name == "head.weight":
-                    # import pdb; pdb.set_trace()
                 zeros = zeros.reshape(w_quant.scales.shape)   
                             
                 new_weight = torch.bitwise_right_shift(torch.unsqueeze(w_quant.qweight, 1).expand(-1, 32 // w_quant.bits, -1), w_quant.wf.unsqueeze(-1)).to(x.device, torch.int16 if w_quant.bits == 8 else torch.int8)
                 torch.bitwise_and(new_weight,(2 ** w_quant.bits) - 1, out=new_weight)
-                new_weight = new_weight.reshape(new_weight.shape[0] * new_weight.shape[1], new_weight.shape[2])
-                new_weight = (w_quant.scales[w_quant.g_idx.long()] * (new_weight - zeros[w_quant.g_idx.long()]))
 
-                out = torch.matmul(x.half(), new_weight)
-                out = out.reshape(out_shape)    
+                new_weight = new_weight.reshape(new_weight.shape[0] * new_weight.shape[1], new_weight.shape[2])
+                num_itr = w_quant.g_idx.shape[0]//x.shape[-1]
+                if num_itr == 1:
+                    weights = (w_quant.scales[w_quant.g_idx.long()] * (new_weight - zeros[w_quant.g_idx.long()]))
+                else:
+                    num_dim = w_quant.g_idx.shape[0]//num_itr
+                    weights = []
+                    for i in range(num_itr):
+                        scale_i = w_quant.scales[:,i*num_dim:(i+1)*num_dim]
+                        weight_i = new_weight[:,i*num_dim:(i+1)*num_dim]
+                        zeros_i = zeros[:,i*num_dim:(i+1)*num_dim]
+                        g_idx_i = w_quant.g_idx[i*num_dim:(i+1)*num_dim]
+                        weights.append(scale_i[g_idx_i.long()] * (weight_i - zeros_i[g_idx_i.long()]))
+                    weights = torch.cat(weights,dim=1)
+
+                # out = torch.matmul(x.half(), weights)
+                out = torch.matmul(x, weights.to(x.dtype))
+                out = out.reshape(out_shape)
                 return out
         else:
             return x @ weight
@@ -621,15 +634,16 @@ class RWKV(MyModule):
                     state[i*5+2] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous()
                     state[i*5+3] = torch.zeros(args.n_embd, dtype=torch.float, requires_grad=False, device=dev).contiguous() - 1e30
                     state[i*5+4] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
-
+            
             seq_mode = len(tokens) > 1
 
             x = w['emb.weight'][tokens if seq_mode else tokens[0]]
-            
+
             for i in range(args.n_layer):
                 bbb = f'blocks.{i}.'
                 att = f'blocks.{i}.att.'
                 ffn = f'blocks.{i}.ffn.'
+                
                 dd = self.strategy[i]
                 dev = dd.device
                 atype = dd.atype
@@ -650,7 +664,12 @@ class RWKV(MyModule):
                 vw = w[f'{att}value.weight'], f'{att}value.weight'
                 rw = w[f'{att}receptance.weight'], f'{att}receptance.weight'
                 ow = w[f'{att}output.weight'], f'{att}output.weight'
-
+                
+                # kw = w[f'{att}key.weight']
+                # vw = w[f'{att}value.weight']
+                # rw = w[f'{att}receptance.weight']
+                # ow = w[f'{att}output.weight']
+                
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
                     vw = vw.to(device=dev, non_blocking=True)
@@ -673,6 +692,7 @@ class RWKV(MyModule):
                 orx = w[f'{att}output.weight_rx'] if wtype == torch.uint8 else x
                 omy = w[f'{att}output.weight_my'] if wtype == torch.uint8 else x
                 ory = w[f'{att}output.weight_ry'] if wtype == torch.uint8 else x
+
                 x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3] = ATT(
                     x, state[i*5+0], state[i*5+1], state[i*5+2], state[i*5+3],
                     w[f'{bbb}ln1.weight'], w[f'{bbb}ln1.bias'],
@@ -690,6 +710,9 @@ class RWKV(MyModule):
                 kw = w[f'{ffn}key.weight'], f'{ffn}key.weight'
                 vw = w[f'{ffn}value.weight'], f'{ffn}value.weight'
                 rw = w[f'{ffn}receptance.weight'], f'{ffn}receptance.weight'
+                # kw = w[f'{ffn}key.weight']
+                # vw = w[f'{ffn}value.weight']
+                # rw = w[f'{ffn}receptance.weight']
 
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
@@ -743,5 +766,4 @@ class RWKV(MyModule):
                     x = self.mm8_seq(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
                 else:
                     x = self.mm8_one(x, w['head.weight'], w['head.weight_mx'], w['head.weight_rx'], w['head.weight_my'], w['head.weight_ry'])
-
             return x.float(), state
