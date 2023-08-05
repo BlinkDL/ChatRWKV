@@ -249,6 +249,14 @@ class RWKV(MyModule):
                 del w['blocks.0.ln0.bias']
 
             print_need_newline = False
+
+            REAL_TIME_FIRST = False
+            for x in list(w.keys()):
+                if '.time_faaaa' in x: REAL_TIME_FIRST = True
+            if REAL_TIME_FIRST:
+                w = {k.replace('.time_faaaa','.time_first') if '.time_faaaa' in k else k: v for k, v in w.items()}
+                self.w = w
+            
             keys = list(w.keys())
             for x in keys:
                 w[x].requires_grad = False
@@ -281,7 +289,10 @@ class RWKV(MyModule):
                         if self.version == 4:
                             w[x] = w[x].float()
                         elif self.version == 5:
-                            w[x] = torch.exp(w[x].float()).reshape(-1,1,1)
+                            if REAL_TIME_FIRST:
+                                w[x] = w[x].float().reshape(-1,1,1)
+                            else:
+                                w[x] = torch.exp(w[x].float()).reshape(-1,1,1)
                     elif '.ln_x' in x: # need fp32 for group_norm
                         w[x] = w[x].float()
                     else:
