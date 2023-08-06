@@ -60,9 +60,8 @@ for TRIAL in range(10):
     print(TRIAL)
 
     if ABC_MODE:
-        ccc_output = 'S:4' # example: the output should have 4 sentences
+        ccc_output = 'S:4' # example: style 4 (can try 1/2/3/4)
         ccc = chr(tokenizer.bos_token_id) + ccc_output
-        print(tokenizer.encode(ccc))
 
         fout = open(f"abc_{TRIAL}.txt", "w")
     elif MIDI_MODE:
