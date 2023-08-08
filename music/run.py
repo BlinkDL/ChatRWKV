@@ -60,7 +60,20 @@ for TRIAL in range(10):
     print(TRIAL)
 
     if ABC_MODE:
-        ccc_output = 'S:4' # example: style 4 (can try 1/2/3/4)
+        ccc_output = 'S:2' # example: 2 segments (can try 1/2/3/4)
+
+        # another example
+        ccc_output = '''S:3
+B:9
+E:4
+B:9
+E:4
+E:4
+B:9
+L:1/8
+M:3/4
+K:D
+ Bc |"G" d2 cB"A" A2 FE |"Bm" F2 B4 F^G |'''
         ccc = chr(tokenizer.bos_token_id) + ccc_output
 
         fout = open(f"abc_{TRIAL}.txt", "w")
