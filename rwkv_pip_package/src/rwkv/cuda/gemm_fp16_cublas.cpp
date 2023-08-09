@@ -76,6 +76,10 @@ void gemm_fp16_cublas(const void *a, const void *b, void *c, int ori_m,
   column-major, non-transposed matrix, and C = A * B ---> C^T = B^T * A^T
  */
 void gemm_fp16_cublas_tensor(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
+  if (a.sizes().size() == 1) {
+    assert(b.sizes().size() == 2);
+    a = at::unsqueeze(a, 0);
+  }
   const auto cuda_data_type = CUDA_R_16F;
   const auto cuda_c_data_type =
       c.dtype() == torch::kFloat32 ? CUDA_R_32F : CUDA_R_16F;

@@ -30,7 +30,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
     load(
         name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp", f"{current_path}/cuda/att_one.cu", f"{current_path}/cuda/att_seq.cu", f"{current_path}/cuda/ffn.cu"],
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp", f"{current_path}/cuda/att_one.cu", f"{current_path}/cuda/att_seq.cu", f"{current_path}/cuda/ffn.cu", f"{current_path}/cuda/att_one_v5.cu"],
         verbose=True,
         extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
         is_python_module=False)
@@ -719,6 +719,27 @@ class RWKV(MyModule):
             return x_plus_out_t, xx, t1_t, t2_t, p_t
 
         @MyFunction
+        def cuda_att_one_v5_fp16(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+
+            kx = torch.empty_like(x)
+            vx = torch.empty_like(x)
+            rx = torch.empty_like(x)
+
+            H = t_decay.shape[0]
+            S = x.shape[-1] // H
+
+            r = torch.empty((H * S,), dtype=torch.float32, device=x.device)
+            k = torch.empty((H * S,), dtype=torch.float32, device=x.device)
+            v = torch.empty((H * S,), dtype=torch.float32, device=x.device)
+            s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            x_plus_out = torch.empty_like(x)
+
+            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, kw, kx, vw, vx, rw, rx, ow, t_first, k, t_decay, v, r, s1, x_plus_out, s2)
+
+            return x_plus_out, xx, s2
+
+        @MyFunction
         def cuda_ffn_one_fp16(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
             krx_bytes = x.numel() * x.element_size()
             vx_bytes = x.shape[0] * kw.shape[1] * x.element_size()
@@ -786,11 +807,13 @@ class RWKV(MyModule):
                 else:
                     ATT = self.att_one if wtype != torch.uint8 else self.att_one_i8
                     FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
+                    if self.version == 5:
+                        ATT = self.att_one_v5
                     if 'cuda' in str(dev) and os.environ["RWKV_CUDA_ON"] == '1' and wtype == torch.float16:
                         ATT = self.cuda_att_one_fp16
                         FFN = self.cuda_ffn_one_fp16
-                    if self.version == 5:
-                        ATT = self.att_one_v5
+                        if self.version == 5:
+                            ATT = self.cuda_att_one_v5_fp16
 
                 x = x.to(dtype=atype, device=dev)
 

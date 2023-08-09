@@ -97,6 +97,7 @@ if args.nsys_profiler:
         model.cuda_ffn_seq_fp16 = nsys(model.cuda_ffn_seq_fp16)
         model.cuda_att_one_fp16 = nsys(model.cuda_att_one_fp16)
         model.cuda_ffn_one_fp16 = nsys(model.cuda_ffn_one_fp16)
+        model.cuda_att_one_v5_fp16 = nsys(model.cuda_att_one_v5_fp16)
 
     model.att_seq = nsys(model.att_seq)
     model.att_seq_i8 = nsys(model.att_seq_i8)
