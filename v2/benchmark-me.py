@@ -109,6 +109,9 @@ if args.nsys_profiler:
     model.mm8_seq = nsys(model.mm8_seq)
     model.mm8_one = nsys(model.mm8_one)
 
+    model.att_one_v5 = nsys(model.att_one_v5)
+    model.att_seq_v5 = nsys(model.att_seq_v5)
+
 if args.compile:
     model = torch.compile(model, backend=args.backend)
 
@@ -162,7 +165,7 @@ for i in range(10):
     if not args.only_fast:
         time_ref = time.time_ns()
         for j in range(len(init_token)):
-            out, state = model.forward([init_token[j]], None if j == 0 else state)
+            out, state = model.forward([0], None if j == 0 else state)
         aa = out.detach().cpu().numpy()
         record_time('slow')
         ts = time_slot['slow']
