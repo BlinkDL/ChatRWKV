@@ -8,7 +8,6 @@
 
 using torch::Tensor;
 
-void gemm_fp16_cublas(Tensor a, Tensor b, Tensor c);
 void gemm_fp16_cublas(const void *a, const void *b, void *c, int m,
                       int n, int k, bool output_fp32);
 
