@@ -68,7 +68,8 @@ Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
                   Tensor rw,
                   /* imm */ Tensor rx, Tensor ow, Tensor t_first,
                   /* imm */ Tensor k, Tensor t_decay, /* imm */ Tensor v,
-                  /* imm */ Tensor r, /* imm */ Tensor s1,
+                  /* imm */ Tensor r, /* imm */ Tensor a, /* imm */ Tensor buf,
+                  /* imm */ Tensor s1,
                   /* out */ Tensor x_plus_out, /* out */ Tensor s2) {
   Tensor xx = at::layer_norm(x, {x.size(-1)}, ln_w, ln_b);
   element_wise(Mix{data_ptr<half>(xx), data_ptr<half>(sx),
@@ -86,24 +87,21 @@ Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
   gemm_fp16_cublas_tensor(vx, vw, v);
   v = at::reshape(v, {H, 1, S});
 
-  {
-    Tensor a = at::matmul(k, v);
+  gemm_fp16_cublas_tensor(k, v, a);
+  // s1 = t_first * a + s
+  // s2 = a + t_decay * s
+  element_wise(Fused1{data_ptr<float>(t_first), data_ptr<float>(t_decay),
+                      data_ptr<float>(a), data_ptr<float>(s),
+                      static_cast<int32_t>(a.size(1) * a.size(2)),
+                      data_ptr<float>(s1), data_ptr<float>(s2)},
+               a.numel());
 
-    // s1 = t_first * a + s
-    // s2 = a + t_decay * s
-    element_wise(Fused1{data_ptr<float>(t_first), data_ptr<float>(t_decay),
-                        data_ptr<float>(a), data_ptr<float>(s),
-                        static_cast<int32_t>(a.size(1) * a.size(2)),
-                        data_ptr<float>(s1), data_ptr<float>(s2)},
-                 a.numel());
-  }
+  gemm_fp16_cublas_tensor(r, s1, buf);
+  buf = at::flatten(buf);
+  buf = at::squeeze(at::group_norm(at::unsqueeze(buf, 0), H, lx_w, lx_b), 0);
+  buf = at::_cast_Half(buf);
 
-  Tensor out = at::matmul(r, s1);
-  out = at::flatten(out);
-  out = at::squeeze(at::group_norm(at::unsqueeze(out, 0), H, lx_w, lx_b), 0);
-  out = at::_cast_Half(out);
-
-  gemm_fp16_cublas_tensor(out, ow, x_plus_out);
+  gemm_fp16_cublas_tensor(buf, ow, x_plus_out);
   x_plus_out += x;
   return xx;
 }

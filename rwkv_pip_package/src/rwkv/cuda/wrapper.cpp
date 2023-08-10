@@ -143,7 +143,8 @@ Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
                   Tensor rw,
                   /* imm */ Tensor rx, Tensor ow, Tensor t_first,
                   /* imm */ Tensor k, Tensor t_decay, /* imm */ Tensor v,
-                  /* imm */ Tensor r, /* imm */ Tensor s1,
+                  /* imm */ Tensor r, /* imm */ Tensor a, /* imm */ Tensor buf,
+                  /* imm */ Tensor s1,
                   /* out */ Tensor x_plus_out, /* out */ Tensor s2);
 
 Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
