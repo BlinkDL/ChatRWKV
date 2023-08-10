@@ -275,6 +275,20 @@ class RWKV(MyModule):
                     if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                         w[x] = w[x].t()
 
+                    if 'att.time_mix_k' in x:
+                        prefix = x[:-2]
+                        import pdb; pdb.set_trace()
+                        w[f'{prefix}_kvr'] = torch.tensor([w[f'{prefix}_k'], w[f'{prefix}_v'], w[f'{prefix}_r']])
+                        del w[f'{prefix}_k']
+                        del w[f'{prefix}_v']
+                        del w[f'{prefix}_r']
+                    if 'att.key.weight' in x:
+                        prefix = x[:-11]
+                        w[f'{prefix}kvr.weight'] = torch.tensor([w[f'{prefix}key.weight'], w[f'{prefix}value.weight'], w[f'{prefix}receptance.weight']])
+                        del w[f'{prefix}key.weight']
+                        del w[f'{prefix}value.weight']
+                        del w[f'{prefix}receptance.weight']
+
                     if '.time_decay' in x: # need fp32 for this
                         if self.version == 4:
                             w[x] = -torch.exp(w[x].float())
@@ -578,18 +592,24 @@ class RWKV(MyModule):
     ########################################################################################################
 
     @MyFunction
-    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        vx = xx * v_mix + sx * (1 - v_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
+        kvrx = xx * kvr_mix + sx * (1 - kvr_mix)
+        # kx = xx * k_mix + sx * (1 - k_mix)
+        # vx = xx * v_mix + sx * (1 - v_mix)
+        # rx = xx * r_mix + sx * (1 - r_mix)
 
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
+        kvr = gemm(kvrx, kvrw, output_dtype=torch.float32)
+        k = kvr[0].view(H, S, 1)
+        v = kvr[1].view(H, 1, S)
+        r = kvr[2].view(H, 1, S)
+
+        # r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
+        # k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
+        # v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
         
         a = gemm(k, v)
         out = r @ (t_first * a + s)
@@ -819,9 +839,9 @@ class RWKV(MyModule):
 
                 x = x.to(dtype=atype, device=dev)
 
-                kw = w[f'{att}key.weight']
-                vw = w[f'{att}value.weight']
-                rw = w[f'{att}receptance.weight']
+                # kw = w[f'{att}key.weight']
+                # vw = w[f'{att}value.weight']
+                # rw = w[f'{att}receptance.weight']
                 ow = w[f'{att}output.weight']
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
@@ -861,9 +881,10 @@ class RWKV(MyModule):
                         x, state[i*3+0], state[i*3+1],
                         w[f'{bbb}ln1.weight'], w[f'{bbb}ln1.bias'],
                         w[f'{att}ln_x.weight'], w[f'{att}ln_x.bias'],
-                        w[f'{att}time_mix_k'], w[f'{att}time_mix_v'], w[f'{att}time_mix_r'],
+                        w[f'{att}time_mix_kvr'],
                         w[f'{att}time_decay'], w[f'{att}time_first'],
-                        kw, vw, rw, ow,
+                        w[f'{att}kvr.weight'], 
+                        ow,
                         kmx, krx, kmy, kry,
                         vmx, vrx, vmy, vry,
                         rmx, rrx, rmy, rry,
