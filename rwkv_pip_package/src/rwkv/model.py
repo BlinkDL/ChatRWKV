@@ -30,7 +30,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
     from torch.utils.cpp_extension import load
     load(
         name=f"wkv_cuda",
-        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp", f"{current_path}/cuda/att_one.cu", f"{current_path}/cuda/att_seq.cu", f"{current_path}/cuda/ffn.cu", f"{current_path}/cuda/att_one_v5.cu"],
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_cublas.cpp", f"{current_path}/cuda/att_one.cu", f"{current_path}/cuda/att_seq.cu", f"{current_path}/cuda/ffn.cu", f"{current_path}/cuda/att_one_v5.cu"],
         verbose=True,
         extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
         is_python_module=False)
@@ -92,7 +92,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
                     c = torch.empty((a.shape[0], b.shape[-1]), dtype=output_dtype, device=a.device)
                 else:
                     c = torch.empty((a.shape[0], a.shape[1], b.shape[-1]), dtype=output_dtype, device=a.device)
-            torch.ops.rwkv.gemm_fp16_cublas(a, b, c)
+            torch.ops.rwkv.gemm_cublas(a, b, c)
             return c
         else:
             return (a @ b).to(output_dtype)
@@ -273,7 +273,7 @@ class RWKV(MyModule):
             
             keys = list(w.keys())
             for x in keys:
-                # w[x].requires_grad = False
+                w[x].requires_grad = False
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
                     layer_id = args.n_layer
@@ -744,25 +744,21 @@ class RWKV(MyModule):
             return x_plus_out_t, xx, t1_t, t2_t, p_t
 
         @MyFunction
-        def cuda_att_one_v5_fp16(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        def cuda_att_one_v5_fp16(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
 
-            kx = torch.empty_like(x)
-            vx = torch.empty_like(x)
-            rx = torch.empty_like(x)
+            kvrx = torch.empty((3, x.numel()), dtype=x.dtype, device=x.device)
 
             H = t_decay.shape[0]
             S = x.shape[-1] // H
 
-            k = torch.empty((H * S,), dtype=torch.float32, device=x.device)
-            v = torch.empty((H * S,), dtype=torch.float32, device=x.device)
-            r = torch.empty((H * S,), dtype=torch.float32, device=x.device)
+            kvr = torch.empty((3, 1, x.shape[-1]), dtype=torch.float32, device=x.device)
             a = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             buf = torch.empty((H, 1, S), dtype=torch.float32, device=x.device)
             s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             x_plus_out = torch.empty_like(x)
 
-            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, kw, kx, vw, vx, rw, rx, ow, t_first, k, t_decay, v, r, a, buf, s1, x_plus_out, s2)
+            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, kvrx, kvrw, ow, t_first, t_decay, kvr, a, buf, s1, x_plus_out, s2) # type: ignore[reportGeneralTypeIssues]
 
             return x_plus_out, xx, s2
 
@@ -773,7 +769,7 @@ class RWKV(MyModule):
             r_bytes = x.shape[0] * rw.shape[1] * x.element_size()
             buf = torch.empty((krx_bytes * 2 + vx_bytes + r_bytes,), device=x.device, dtype=torch.int8)
             x_plus_out = torch.empty_like(x)
-            xx = torch.ops.rwkv.ffn_one(x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, buf, x_plus_out)
+            xx = torch.ops.rwkv.ffn_one(x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, buf, x_plus_out) # type: ignore[reportGeneralTypeIssues]
             return x_plus_out, xx
 
 

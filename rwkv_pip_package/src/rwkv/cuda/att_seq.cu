@@ -8,8 +8,10 @@
 
 using torch::Tensor;
 
-void gemm_fp16_cublas(const void *a, const void *b, void *c, int m,
-                      int n, int k, bool output_fp32);
+void gemm_cublas(const half *a, const half *b, half *c, int batch, int ori_m,
+                 int ori_n, int ori_k);
+void gemm_cublas(const half *a, const half *b, float *c, int batch, int ori_m,
+                 int ori_n, int ori_k);
 
 // based on `kernel_wkv_forward`, fusing more operations
 __global__ void kernel_wkv_forward_new(
@@ -163,16 +165,16 @@ Tensor att_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
   float* v = k + x.size(0) * kw.size(1);
   half* r = reinterpret_cast<half*>(v + x.size(0) * vw.size(1));
 
-  gemm_fp16_cublas(kx, kw.data_ptr(), k, x.size(0), kw.size(1), kw.size(0), true);
-  gemm_fp16_cublas(vx, vw.data_ptr(), v, x.size(0), vw.size(1), vw.size(0), true);
-  gemm_fp16_cublas(rx, rw.data_ptr(), r, x.size(0), rw.size(1), rw.size(0), false);
+  gemm_cublas(kx, data_ptr<half>(kw), k, 1, x.size(0), kw.size(1), kw.size(0));
+  gemm_cublas(vx, data_ptr<half>(vw), v, 1, x.size(0), vw.size(1), vw.size(0));
+  gemm_cublas(rx, data_ptr<half>(rw), r, 1, x.size(0), rw.size(1), rw.size(0));
   element_wise(InplaceSigmoid{r}, x.size(0) * rw.size(1));
   cuda_wkv_forward_new(1, x.size(0), x.size(1), data_ptr<float>(t_decay),
                        data_ptr<float>(t_first), k, v, r,
                        wkv_y, data_ptr<float>(aa),
                        data_ptr<float>(bb), data_ptr<float>(pp));
   element_wise(InplaceMul{wkv_y, r}, x.numel());
-  gemm_fp16_cublas(wkv_y, ow.data_ptr(), x_plus_out.data_ptr(), x.size(0), ow.size(1), ow.size(0), false);
+  gemm_cublas(wkv_y, data_ptr<half>(ow), data_ptr<half>(x_plus_out), 1, x.size(0), ow.size(1), ow.size(0));
   x_plus_out += x;
   return xx;
 }

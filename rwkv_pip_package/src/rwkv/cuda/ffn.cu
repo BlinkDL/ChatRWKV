@@ -8,8 +8,8 @@
 
 using torch::Tensor;
 
-void gemm_fp16_cublas(const void *a, const void *b, void *c, int ori_m,
-                      int ori_n, int ori_k, bool output_fp32);
+void gemm_cublas(const half *a, const half *b, half *c, int batch, int ori_m,
+                 int ori_n, int ori_k);
 
 __global__ void _ffn_seq_mix(const half *xx, const half *sx, const half *k_mix,
                              const half *r_mix, const int outer_size,
@@ -95,14 +95,12 @@ Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
   ffn_seq_mix(data_ptr<half>(xx), data_ptr<half>(sx), data_ptr<half>(k_mix),
               data_ptr<half>(r_mix), xx.size(0), xx.size(1), kx, rx);
 
-  gemm_fp16_cublas(rx, rw.data_ptr(), r, x.size(0), rw.size(1), x.size(1),
-                   false);
+  gemm_cublas(rx, data_ptr<half>(rw), r, 1, x.size(0), rw.size(1), x.size(1));
   element_wise(InplaceSigmoid{r}, x.size(0) * rw.size(1));
-  gemm_fp16_cublas(kx, kw.data_ptr(), vx, x.size(0), kw.size(1), x.size(1),
-                   false);
+  gemm_cublas(kx, data_ptr<half>(kw), vx, 1, x.size(0), kw.size(1), x.size(1));
   element_wise(InplaceReLUAndSquare{vx}, x.size(0) * kw.size(1));
-  gemm_fp16_cublas(vx, vw.data_ptr(), x_plus_out.data_ptr(), x.size(0),
-                   vw.size(1), vw.size(0), false);
+  gemm_cublas(vx, data_ptr<half>(vw), data_ptr<half>(x_plus_out), 1, x.size(0),
+                   vw.size(1), vw.size(0));
   element_wise(InplaceFma{data_ptr<half>(x_plus_out), r, data_ptr<half>(x)},
                x_plus_out.numel());
   return xx;
@@ -153,12 +151,12 @@ Tensor ffn_one(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
                          data_ptr<half>(xx), data_ptr<half>(sx), kx, rx},
                x.numel());
   // vector * matrix, so m = 1
-  gemm_fp16_cublas(rx, rw.data_ptr(), r, 1, rw.size(1), rw.size(0), false);
+  gemm_cublas(rx, data_ptr<half>(rw), r, 1, 1, rw.size(1), rw.size(0));
   element_wise(InplaceSigmoid{r}, rw.size(1));
-  gemm_fp16_cublas(kx, kw.data_ptr(), vx, 1, kw.size(1), kw.size(0), false);
+  gemm_cublas(kx, data_ptr<half>(kw), vx, 1, 1, kw.size(1), kw.size(0));
   element_wise(InplaceReLUAndSquare{vx}, kw.size(1));
-  gemm_fp16_cublas(vx, vw.data_ptr(), x_plus_out.data_ptr(), 1, vw.size(1),
-                   vw.size(0), false);
+  gemm_cublas(vx, data_ptr<half>(vw), data_ptr<half>(x_plus_out), 1, 1, vw.size(1),
+                   vw.size(0));
   element_wise(InplaceFma{data_ptr<half>(x_plus_out), r, data_ptr<half>(x)},
                x_plus_out.numel());
   return xx;
