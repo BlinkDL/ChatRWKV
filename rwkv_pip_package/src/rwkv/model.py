@@ -607,8 +607,7 @@ class RWKV(MyModule):
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        import pdb; pdb.set_trace()
-        kvr = gemm(kvrx, kvrw, output_dtype=torch.float32)
+        kvr = gemm(kvrx.unsqueeze(1), kvrw, output_dtype=torch.float32)
         k = kvr[0].view(H, S, 1)
         v = kvr[1].view(H, 1, S)
         r = kvr[2].view(H, 1, S)
