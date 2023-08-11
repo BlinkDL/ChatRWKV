@@ -243,6 +243,25 @@ class RWKV(MyModule):
                 del w['blocks.0.ln0.weight']
                 del w['blocks.0.ln0.bias']
 
+                keys = list(w.keys())
+                for x in keys:
+                    if 'att.time_mix' in x:
+                        if 'att.time_mix_k' in x:
+                            prefix = x[:-2]
+                            w[f'{prefix}_kvr'] = torch.stack([w[f'{prefix}_k'].squeeze(), w[f'{prefix}_v'].squeeze(), w[f'{prefix}_r'].squeeze()]).cuda()
+                            del w[f'{prefix}_k']
+                            del w[f'{prefix}_v']
+                            del w[f'{prefix}_r']
+                        continue
+                    if 'att.key.weight' in x or 'att.value.weight' in x or 'att.receptance.weight' in x:
+                        if 'att.key.weight' in x:
+                            prefix = x[:-10]
+                            w[f'{prefix}kvr.weight'] = torch.stack([w[f'{prefix}key.weight'].t(), w[f'{prefix}value.weight'].t(), w[f'{prefix}receptance.weight'].t()]).cuda()
+                            del w[f'{prefix}key.weight']
+                            del w[f'{prefix}value.weight']
+                            del w[f'{prefix}receptance.weight']
+                        continue
+
             print_need_newline = False
 
             REAL_TIME_FIRST = False
@@ -254,7 +273,7 @@ class RWKV(MyModule):
             
             keys = list(w.keys())
             for x in keys:
-                w[x].requires_grad = False
+                # w[x].requires_grad = False
                 layer_id = int(x.split('.')[1]) if ('blocks.' in x) else 0
                 if ('ln_out.' in x) or ('head.' in x):
                     layer_id = args.n_layer
@@ -270,24 +289,10 @@ class RWKV(MyModule):
                         if 'ffn.value.weight' in x:
                             w[x] = w[x] / (2 ** int(layer_id // self.RESCALE_LAYER))
 
-                    if '.time_' in x:
+                    if '.time_' in x and 'kvr' not in x:
                         w[x] = w[x].squeeze()
                     if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                         w[x] = w[x].t()
-
-                    if 'att.time_mix_k' in x:
-                        prefix = x[:-2]
-                        import pdb; pdb.set_trace()
-                        w[f'{prefix}_kvr'] = torch.tensor([w[f'{prefix}_k'], w[f'{prefix}_v'], w[f'{prefix}_r']])
-                        del w[f'{prefix}_k']
-                        del w[f'{prefix}_v']
-                        del w[f'{prefix}_r']
-                    if 'att.key.weight' in x:
-                        prefix = x[:-11]
-                        w[f'{prefix}kvr.weight'] = torch.tensor([w[f'{prefix}key.weight'], w[f'{prefix}value.weight'], w[f'{prefix}receptance.weight']])
-                        del w[f'{prefix}key.weight']
-                        del w[f'{prefix}value.weight']
-                        del w[f'{prefix}receptance.weight']
 
                     if '.time_decay' in x: # need fp32 for this
                         if self.version == 4:
@@ -592,7 +597,7 @@ class RWKV(MyModule):
     ########################################################################################################
 
     @MyFunction
-    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kvrx = xx * kvr_mix + sx * (1 - kvr_mix)
         # kx = xx * k_mix + sx * (1 - k_mix)
@@ -602,6 +607,7 @@ class RWKV(MyModule):
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
+        import pdb; pdb.set_trace()
         kvr = gemm(kvrx, kvrw, output_dtype=torch.float32)
         k = kvr[0].view(H, S, 1)
         v = kvr[1].view(H, 1, S)
