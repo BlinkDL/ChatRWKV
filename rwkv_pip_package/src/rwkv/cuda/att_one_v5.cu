@@ -54,6 +54,20 @@ struct Mix {
                                   __hmul(sx_, __hsub(__float2half(1), r_mix_)));
   }
 };
+
+struct ToHalf {
+  const float *x;
+  half *y;
+  __device__ void operator()(int i) const { y[i] = __float2half(x[i]); }
+};
+
+struct InplaceAdd {
+  __device__ __forceinline__ half operator()(int i) const {
+    y[i] = __hadd(x[i], y[i]);
+  }
+  half *y;
+  half *x;
+};
 } // namespace
 
 using torch::Tensor;
@@ -64,50 +78,44 @@ void gemm_cublas(const void *a, const void *b, void *c, int batch, int ori_m,
                  at::ScalarType torch_output_dtype);
 
 Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
-                  Tensor lx_w, Tensor lx_b, Tensor kvr_mix,
-                  /* imm */ Tensor kvrx, Tensor kvrw, Tensor ow, Tensor t_first,
-                  Tensor t_decay, /* imm */ Tensor kvr, /* imm */ Tensor a,
-                  /* imm */ Tensor buf,
-                  /* imm */ Tensor s1,
-                  /* out */ Tensor x_plus_out, /* out */ Tensor s2) {
+                  Tensor lx_w, Tensor lx_b, Tensor kvr_mix, Tensor kvrw,
+                  Tensor ow, Tensor t_first, Tensor t_decay, Tensor tmp,
+                  Tensor buf, /* out */ Tensor s2_t,
+                  /* out */ Tensor x_plus_out_t) {
   const int x_numel = x.numel();
   Tensor xx = at::layer_norm(x, {x_numel}, ln_w, ln_b);
-  element_wise(Mix{data_ptr<half>(xx), data_ptr<half>(sx),
-                   data_ptr<half>(kvr_mix), static_cast<int>(x_numel),
-                   data_ptr<half>(kvrx)},
-               x_numel);
-
   int H = t_decay.size(0);
   int S = x_numel / H;
-  // gemm_cublas_tensor(at::unsqueeze(kvrx, 1), kvrw, kvr);
-  gemm_cublas(data_ptr<half>(kvrx), data_ptr<half>(kvrw), data_ptr<float>(kvr),
-              3, 1, x_numel, x_numel, at::kHalf, at::kFloat);
-  float* k = data_ptr<float>(kvr);
-  float* v = k + x_numel;
-  float* r = v + x_numel;
-  // Tensor k = at::reshape(kvr[0], {H, S, 1});
-  // Tensor v = at::reshape(kvr[1], {H, 1, S});
-  // Tensor r = at::reshape(kvr[2], {H, 1, S});
+  char *buf_ptr = (char *)buf.data_ptr();
+  half *kvrx = (half *)buf_ptr;
+  float *kvr = (float *)(kvrx + 3 * x_numel);
+  float *a = kvr + 3 * x_numel;
+  half *tmp2 = (half *)(a + H * S * S);
+  float *s1 = (float *)(tmp2 + x_numel);
+  float *s2 = data_ptr<float>(s2_t);
+  half *x_plus_out = data_ptr<half>(x_plus_out_t);
 
-  // gemm_cublas_tensor(k, v, a);
-  gemm_cublas(k, v, data_ptr<float>(a), H, S, S, 1, at::kFloat, at::kFloat);
-  // s1 = t_first * a + s
-  // s2 = a + t_decay * s
-  element_wise(Fused1{data_ptr<float>(t_first), data_ptr<float>(t_decay),
-                      data_ptr<float>(a), data_ptr<float>(s),
-                      static_cast<int32_t>(a.size(1) * a.size(2)),
-                      data_ptr<float>(s1), data_ptr<float>(s2)},
-               a.numel());
+  element_wise(Mix{data_ptr<half>(xx), data_ptr<half>(sx),
+                   data_ptr<half>(kvr_mix), static_cast<int>(x_numel), kvrx},
+               x_numel);
 
-  // gemm_cublas_tensor(r, s1, buf);
-  gemm_cublas(r, data_ptr<float>(s1), data_ptr<float>(buf), H, 1, S, S,
-              at::kFloat, at::kFloat);
-  buf = at::group_norm(buf, H, lx_w, lx_b);
-  buf = at::_cast_Half(buf);
+  gemm_cublas(kvrx, data_ptr<half>(kvrw), kvr, 3, 1, x_numel, x_numel,
+              at::kHalf, at::kFloat);
+  float *k = kvr;
+  float *v = k + x_numel;
+  float *r = v + x_numel;
 
-  // gemm_cublas_tensor(buf, ow, x_plus_out);
-  gemm_cublas(data_ptr<half>(buf), data_ptr<half>(ow), data_ptr<half>(x_plus_out),
-              1, 1, x_numel, x_numel, at::kHalf, at::kHalf);
-  x_plus_out += x;
+  gemm_cublas(k, v, a, H, S, S, 1, at::kFloat, at::kFloat);
+  element_wise(Fused1{data_ptr<float>(t_first), data_ptr<float>(t_decay), a,
+                      data_ptr<float>(s), static_cast<int32_t>(S * S), s1, s2},
+               H * S * S);
+
+  gemm_cublas(r, s1, data_ptr<float>(tmp), H, 1, S, S, at::kFloat, at::kFloat);
+  tmp = at::group_norm(tmp, H, lx_w, lx_b);
+  element_wise(ToHalf{data_ptr<float>(tmp), tmp2}, tmp.numel());
+
+  gemm_cublas(tmp2, data_ptr<half>(ow), x_plus_out, 1, 1, x_numel, x_numel,
+              at::kHalf, at::kHalf);
+  element_wise(InplaceAdd{x_plus_out, data_ptr<half>(x)}, x.numel());
   return xx;
 }

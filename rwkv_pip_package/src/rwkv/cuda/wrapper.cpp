@@ -137,12 +137,10 @@ Tensor att_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
                Tensor t_decay, /* imm */ Tensor buf, /* out */ Tensor x_plus_out);
 
 Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
-                  Tensor lx_w, Tensor lx_b, Tensor kvr_mix,
-                  /* imm */ Tensor kvrx, Tensor kvrw, Tensor ow, Tensor t_first,
-                  Tensor t_decay, /* imm */ Tensor kvr, /* imm */ Tensor a,
-                  /* imm */ Tensor buf,
-                  /* imm */ Tensor s1,
-                  /* out */ Tensor x_plus_out, /* out */ Tensor s2);
+                  Tensor lx_w, Tensor lx_b, Tensor kvr_mix, Tensor kvrw,
+                  Tensor ow, Tensor t_first, Tensor t_decay, Tensor tmp,
+                  Tensor buf, /* out */ Tensor s2_t,
+                  /* out */ Tensor x_plus_out_t);
 
 Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
                Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,

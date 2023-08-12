@@ -746,21 +746,27 @@ class RWKV(MyModule):
 
         @MyFunction
         def cuda_att_one_v5_fp16(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-            kvrx = torch.empty((3, x.numel()), dtype=x.dtype, device=x.device)
-
             H = t_decay.shape[0]
             S = x.shape[-1] // H
-
-            kvr = torch.empty((3, 1, x.shape[-1]), dtype=torch.float32, device=x.device)
-            a = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
-            buf = torch.empty((1, x.shape[-1]), dtype=torch.float32, device=x.device)
-            s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            tmp = torch.empty((1, x.shape[-1]), dtype=torch.float32, device=x.device)
+            buf = torch.empty((3 * x.numel() * 2 + 3 * x.numel() * 4 + H * S * S * 4 + x.numel() * 2 + H * S * S * 4,), dtype=torch.int8, device=x.device)
+            # two outputs
             s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             x_plus_out = torch.empty_like(x)
+
+            # kvrx = torch.empty((3, x.numel()), dtype=x.dtype, device=x.device)
+            # kvr = torch.empty((3, 1, x.shape[-1]), dtype=torch.float32, device=x.device)
+            # a = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # tmp2 = torch.empty((1, x.shape[-1]), dtype=torch.float16, device=x.device)
+            # s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # x_plus_out = torch.empty_like(x)
+
             # import pdb; pdb.set_trace()
 
-            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, kvrx, kvrw, ow, t_first, t_decay, kvr, a, buf, s1, x_plus_out, s2) # type: ignore[reportGeneralTypeIssues]
+            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, kvrw, ow, t_first, t_decay, tmp, buf, s2, x_plus_out) # type: ignore[reportGeneralTypeIssues]
 
+            # import pdb; pdb.set_trace()
             return x_plus_out, xx, s2
 
         @MyFunction
