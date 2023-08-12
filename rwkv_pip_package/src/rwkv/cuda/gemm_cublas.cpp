@@ -4,6 +4,7 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
 
 #define CUBLAS_CHECK(condition)                                                \
   for (cublasStatus_t _cublas_check_status = (condition);                      \
@@ -21,7 +22,6 @@
 
 cublasHandle_t get_cublas_handle() {
   static cublasHandle_t cublas_handle = []() {
-    printf("hi!");
     cublasHandle_t handle = nullptr;
     CUBLAS_CHECK(cublasCreate(&handle));
 #if CUDA_VERSION < 11000
@@ -40,10 +40,10 @@ cublasHandle_t get_cublas_handle() {
   column-major, non-transposed matrix, and C = A * B ---> C^T = B^T * A^T
  */
 // template for caffe2::TypeMeta and c10::ScalarType
-template <typename T>
 void gemm_cublas(const void *a, const void *b, void *c, int batch, int ori_m,
-                 int ori_n, int ori_k, T torch_input_dtype,
-                 T torch_output_dtype) {
+                 int ori_n, int ori_k, at::ScalarType torch_input_dtype,
+                 at::ScalarType torch_output_dtype) {
+  cublasHandle_t cublas_handle = get_cublas_handle();
   const auto cuda_input_dtype =
       torch_input_dtype == torch::kFloat32 ? CUDA_R_32F : CUDA_R_16F;
   const auto cuda_output_dtype =
@@ -62,7 +62,6 @@ void gemm_cublas(const void *a, const void *b, void *c, int batch, int ori_m,
   const int cublas_lda = cublas_m;
   const int cublas_ldb = cublas_k;
   const int cublas_ldc = cublas_m;
-  cublasHandle_t cublas_handle = get_cublas_handle();
 
 #if CUDA_VERSION >= 11000
   cublasGemmAlgo_t algo = CUBLAS_GEMM_DEFAULT;
@@ -117,15 +116,15 @@ void gemm_cublas_tensor(const Tensor &a, const Tensor &b, const Tensor &c) {
   if (a.sizes().size() == 1) {
     assert(b.sizes().size() == 2);
     return gemm_cublas(a.data_ptr(), b.data_ptr(), c.data_ptr(), 1, 1,
-                       b.size(1), b.size(0), a.dtype(), c.dtype());
+                       b.size(1), b.size(0), a.scalar_type(), c.scalar_type());
   } else if (a.sizes().size() == 3) {
     assert(b.sizes().size() == 3);
     return gemm_cublas(a.data_ptr(), b.data_ptr(), c.data_ptr(), a.size(0),
-                       a.size(1), b.size(2), b.size(1), a.dtype(), c.dtype());
+                       a.size(1), b.size(2), b.size(1), a.scalar_type(), c.scalar_type());
   } else {
     assert(a.sizes().size() == 2);
     assert(b.sizes().size() == 2);
     return gemm_cublas(a.data_ptr(), b.data_ptr(), c.data_ptr(), 1, a.size(0),
-                       b.size(1), b.size(0), a.dtype(), c.dtype());
+                       b.size(1), b.size(0), a.scalar_type(), c.scalar_type());
   }
 }

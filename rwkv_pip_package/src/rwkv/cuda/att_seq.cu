@@ -13,6 +13,7 @@ void gemm_cublas(const half *a, const half *b, half *c, int batch, int ori_m,
 void gemm_cublas(const half *a, const half *b, float *c, int batch, int ori_m,
                  int ori_n, int ori_k);
 
+namespace {
 // based on `kernel_wkv_forward`, fusing more operations
 __global__ void kernel_wkv_forward_new(
     const int B, const int T, const int C, const float *__restrict__ const _w,
@@ -114,6 +115,7 @@ struct InplaceMul {
   half *y;
   half *x;
 };
+}
 
 /*
    Equivalent Python code:

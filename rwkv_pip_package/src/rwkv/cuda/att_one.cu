@@ -6,6 +6,7 @@
 #include "element_wise.h"
 #include "util.h"
 
+namespace {
 // Equivalent Python code:
 // ww = t_first + k
 // p = torch.maximum(pp, ww)
@@ -85,6 +86,7 @@ struct Mix {
                    __hmul(sx_, __hsub(__float2half(1), r_mix_)));
   }
 };
+}
 
 using torch::Tensor;
 

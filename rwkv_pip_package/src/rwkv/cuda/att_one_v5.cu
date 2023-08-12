@@ -6,6 +6,7 @@
 #include "element_wise.h"
 #include "util.h"
 
+namespace {
 // Equivalent Python code:
 // s1 = t_first * a + s
 // s2 = a + t_decay * s
@@ -53,14 +54,12 @@ struct Mix {
                                   __hmul(sx_, __hsub(__float2half(1), r_mix_)));
   }
 };
+} // namespace
 
 using torch::Tensor;
 
 void gemm_cublas_tensor(const Tensor &a, const Tensor &b, const Tensor &c);
 
-// xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix,
-// kvrx, kvrw, ow, t_first, t_decay, kvr, a, buf, s1, x_plus_out, s2) # type:
-// ignore[reportGeneralTypeIssues]
 Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
                   Tensor lx_w, Tensor lx_b, Tensor kvr_mix,
                   /* imm */ Tensor kvrx, Tensor kvrw, Tensor ow, Tensor t_first,
@@ -70,8 +69,8 @@ Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
                   /* out */ Tensor x_plus_out, /* out */ Tensor s2) {
   Tensor xx = at::layer_norm(x, {x.size(-1)}, ln_w, ln_b);
   element_wise(Mix{data_ptr<half>(xx), data_ptr<half>(sx),
-                   data_ptr<half>(kvr_mix),
-                   static_cast<int>(x.numel()), data_ptr<half>(kvrx)},
+                   data_ptr<half>(kvr_mix), static_cast<int>(x.numel()),
+                   data_ptr<half>(kvrx)},
                x.numel());
 
   int H = t_decay.size(0);
