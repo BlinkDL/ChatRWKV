@@ -599,6 +599,7 @@ class RWKV(MyModule):
     @MyFunction
     def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        # import pdb; pdb.set_trace()
         kvrx = xx * kvr_mix + sx * (1 - kvr_mix)
         # kx = xx * k_mix + sx * (1 - k_mix)
         # vx = xx * v_mix + sx * (1 - v_mix)
@@ -752,7 +753,7 @@ class RWKV(MyModule):
 
             kvr = torch.empty((3, 1, x.shape[-1]), dtype=torch.float32, device=x.device)
             a = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
-            buf = torch.empty((H, 1, S), dtype=torch.float32, device=x.device)
+            buf = torch.empty((1, x.shape[-1]), dtype=torch.float32, device=x.device)
             s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
             x_plus_out = torch.empty_like(x)
