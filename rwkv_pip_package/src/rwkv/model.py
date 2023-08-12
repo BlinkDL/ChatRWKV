@@ -629,7 +629,10 @@ class RWKV(MyModule):
         return x + out, xx, s
 
     @MyFunction
-    def att_seq_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_seq_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        # torch.jit doesn't support unpack tensor
+        k_mix, v_mix, r_mix = kvr_mix[0], kvr_mix[1], kvr_mix[2]
+        kw, vw, rw = kvrw[0], kvrw[1], kvrw[2]
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
