@@ -33,9 +33,9 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 
 **RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
-**RWKV in 150 lines** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
+**🔥 RWKV in 150 lines 🔥** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
 
-**Building your own RWKV inference engine:** begin with https://github.com/BlinkDL/ChatRWKV/blob/main/src/model_run.py which is easier to understand (used by https://github.com/BlinkDL/ChatRWKV/blob/main/chat.py).
+**🔥 Building your own RWKV inference engine 🔥**: begin with https://github.com/BlinkDL/ChatRWKV/blob/main/src/model_run.py which is easier to understand (used by https://github.com/BlinkDL/ChatRWKV/blob/main/chat.py).
 
 **RWKV preprint** https://arxiv.org/abs/2305.13048
 
