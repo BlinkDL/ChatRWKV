@@ -119,23 +119,59 @@ void mm8_one(int64_t N, int64_t M,
 using torch::Tensor;
 
 #ifndef DISABLE_CUBLAS_GEMM
-void gemm_fp16_cublas(Tensor a, Tensor b, Tensor c);
+void gemm_cublas_tensor(const Tensor& a, const Tensor& b, const Tensor& c);
 #endif
+
+Tensor att_one(Tensor x, Tensor ln_w, Tensor ln_b, Tensor sx, Tensor k_mix,
+             Tensor v_mix, Tensor r_mix, Tensor kw,
+             /* imm */ Tensor kx, Tensor vw, /* imm */ Tensor vx, Tensor rw,
+             /* imm */ Tensor rx, Tensor ow, Tensor t_first,
+             /* imm */ Tensor k, Tensor pp, Tensor ww, Tensor aa, Tensor bb,
+             Tensor t_decay, /* imm */ Tensor v, /* in & out */ Tensor r,
+             /* out */ Tensor x_plus_out, /* out */ Tensor t1,
+             /* out */ Tensor t2, /* out */ Tensor p);
+
+Tensor att_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor v_mix, Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               Tensor ow, Tensor t_first, Tensor pp, Tensor aa, Tensor bb,
+               Tensor t_decay, /* imm */ Tensor buf, /* out */ Tensor x_plus_out);
+
+Tensor att_one_v5(Tensor x, Tensor sx, Tensor s, Tensor ln_w, Tensor ln_b,
+                  Tensor lx_w, Tensor lx_b, Tensor kvr_mix, Tensor kvrw,
+                  Tensor ow, Tensor t_first, Tensor t_decay, Tensor tmp,
+                  Tensor buf, /* out */ Tensor s2_t,
+                  /* out */ Tensor x_plus_out_t);
+
+Tensor ffn_seq(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               /* imm */ Tensor buf,
+               /* out */ Tensor x_plus_out);
+
+Tensor ffn_one(Tensor x, Tensor sx, Tensor ln_w, Tensor ln_b, Tensor k_mix,
+               Tensor r_mix, Tensor kw, Tensor vw, Tensor rw,
+               /* imm */ Tensor buf,
+               /* out */ Tensor x_plus_out);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("wkv_forward", &wkv_forward, "wkv forward");
     m.def("mm8_seq", &mm8_seq, "mm8 seq");
     m.def("mm8_one", &mm8_one, "mm8 one");
-#ifndef DISABLE_CUBLAS_GEMM
-    m.def("gemm_fp16_cublas", &gemm_fp16_cublas, "gemv fp16 cublas");
-#endif
+    m.def("gemm_cublas", &gemm_cublas_tensor, "gemv fp16 cublas");
+    m.def("att_one", &att_one, "att one");
+    m.def("att_one_v5", &att_one_v5, "att one v5");
+    m.def("att_seq", &att_seq, "att seq");
+    m.def("ffn_seq", &ffn_seq, "ffn seq");
+    m.def("ffn_one", &ffn_one, "ffn one");
 }
 
 TORCH_LIBRARY(rwkv, m) {
     m.def("wkv_forward", wkv_forward);
     m.def("mm8_seq", mm8_seq);
     m.def("mm8_one", mm8_one);
-#ifndef DISABLE_CUBLAS_GEMM
-    m.def("gemm_fp16_cublas", gemm_fp16_cublas);
-#endif
+    m.def("gemm_cublas", gemm_cublas_tensor);
+    m.def("att_one", att_one);
+    m.def("att_one_v5", &att_one_v5);
+    m.def("att_seq", att_seq);
+    m.def("ffn_seq", ffn_seq);
+    m.def("ffn_one", ffn_one);
 }

@@ -3,7 +3,7 @@
 ########################################################################################################
 
 from typing import Optional
-import types, gc, os, time, re
+import types, gc, os, time, re, platform
 import torch
 from torch.nn import functional as F
 torch.backends.cudnn.benchmark = True
@@ -26,25 +26,14 @@ else:
     MyStatic = __nop
 
 if os.environ.get('RWKV_CUDA_ON') == '1':
+    assert platform.system() == 'Linux', platform.system()
     from torch.utils.cpp_extension import load
-    try:
-        load(
-            name=f"wkv_cuda",
-            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
-            verbose=True,
-            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
-            is_python_module=False)
-        DISABLE_CUBLAS_GEMM = False
-    except:
-        print("Failed to build cuBLAS matmul, falling back to torch.matmul. Small model with fp16 will overflow.")
-        load(
-            name=f"wkv_cuda",
-            sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
-            verbose=True,
-            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
-            extra_cflags=["-DDISABLE_CUBLAS_GEMM"],
-            is_python_module=False)
-        DISABLE_CUBLAS_GEMM = True
+    load(
+        name=f"wkv_cuda",
+        sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_cublas.cpp", f"{current_path}/cuda/att_one.cu", f"{current_path}/cuda/att_seq.cu", f"{current_path}/cuda/ffn.cu", f"{current_path}/cuda/att_one_v5.cu"],
+        verbose=True,
+        extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+        is_python_module=False)
 
     @MyStatic
     def cuda_wkv(T: int, C: int, w, u, k, v, aa, bb, pp):
@@ -85,7 +74,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
 else:
     os.environ["RWKV_CUDA_ON"] = '0'
 
-if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
+if os.environ.get('RWKV_CUDA_ON') == '1':
     @MyStatic
     def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
@@ -103,7 +92,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
                     c = torch.empty((a.shape[0], b.shape[-1]), dtype=output_dtype, device=a.device)
                 else:
                     c = torch.empty((a.shape[0], a.shape[1], b.shape[-1]), dtype=output_dtype, device=a.device)
-            torch.ops.rwkv.gemm_fp16_cublas(a, b, c)
+            torch.ops.rwkv.gemm_cublas(a, b, c)
             return c
         else:
             return (a @ b).to(output_dtype)
@@ -143,6 +132,12 @@ class RWKV(MyModule):
         prxxx(f'Loading {args.MODEL_NAME} ...')
         with torch.no_grad():
             self.w = torch.load(args.MODEL_NAME, map_location='cpu') # load model to CPU first
+            # it is supported to load a pure meta-tensor state dict (e.g. for quick testing)
+            for k, v in self.w.items():
+                if v.is_meta:
+                    # torch.zeros_like(v, device='cpu') doesn't produce an all-zero tensor
+                    # if v is a meta tensor
+                    self.w[k] = torch.zeros(v.shape, dtype=v.dtype, device='cpu')
             gc.collect()
             w = self.w
 
@@ -248,6 +243,25 @@ class RWKV(MyModule):
                 del w['blocks.0.ln0.weight']
                 del w['blocks.0.ln0.bias']
 
+                keys = list(w.keys())
+                for x in keys:
+                    if 'att.time_mix' in x:
+                        if 'att.time_mix_k' in x:
+                            prefix = x[:-2]
+                            w[f'{prefix}_kvr'] = torch.stack([w[f'{prefix}_k'].squeeze(), w[f'{prefix}_v'].squeeze(), w[f'{prefix}_r'].squeeze()]).cuda()
+                            del w[f'{prefix}_k']
+                            del w[f'{prefix}_v']
+                            del w[f'{prefix}_r']
+                        continue
+                    if 'att.key.weight' in x or 'att.value.weight' in x or 'att.receptance.weight' in x:
+                        if 'att.key.weight' in x:
+                            prefix = x[:-10]
+                            w[f'{prefix}kvr.weight'] = torch.stack([w[f'{prefix}key.weight'].t(), w[f'{prefix}value.weight'].t(), w[f'{prefix}receptance.weight'].t()]).cuda()
+                            del w[f'{prefix}key.weight']
+                            del w[f'{prefix}value.weight']
+                            del w[f'{prefix}receptance.weight']
+                        continue
+
             print_need_newline = False
 
             REAL_TIME_FIRST = False
@@ -275,7 +289,7 @@ class RWKV(MyModule):
                         if 'ffn.value.weight' in x:
                             w[x] = w[x] / (2 ** int(layer_id // self.RESCALE_LAYER))
 
-                    if '.time_' in x:
+                    if '.time_' in x and 'kvr' not in x:
                         w[x] = w[x].squeeze()
                     if 'key.weight' in x or 'value.weight' in x or 'receptance.weight' in x or 'output.weight' in x or 'head.weight' in x:
                         w[x] = w[x].t()
@@ -583,18 +597,25 @@ class RWKV(MyModule):
     ########################################################################################################
 
     @MyFunction
-    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_one_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        vx = xx * v_mix + sx * (1 - v_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
+        # import pdb; pdb.set_trace()
+        kvrx = xx * kvr_mix + sx * (1 - kvr_mix)
+        # kx = xx * k_mix + sx * (1 - k_mix)
+        # vx = xx * v_mix + sx * (1 - v_mix)
+        # rx = xx * r_mix + sx * (1 - r_mix)
 
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
+        kvr = gemm(kvrx.unsqueeze(1), kvrw, output_dtype=torch.float32)
+        k = kvr[0].view(H, S, 1)
+        v = kvr[1].view(H, 1, S)
+        r = kvr[2].view(H, 1, S)
+
+        # r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
+        # k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
+        # v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
         
         a = gemm(k, v)
         out = r @ (t_first * a + s)
@@ -608,7 +629,10 @@ class RWKV(MyModule):
         return x + out, xx, s
 
     @MyFunction
-    def att_seq_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_seq_v5(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        # torch.jit doesn't support unpack tensor
+        k_mix, v_mix, r_mix = kvr_mix[0], kvr_mix[1], kvr_mix[2]
+        kw, vw, rw = kvrw[0], kvrw[1], kvrw[2]
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
@@ -650,7 +674,20 @@ class RWKV(MyModule):
 
     if os.environ["RWKV_CUDA_ON"] == '1':
         @MyFunction
-        def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        def cuda_att_seq_fp16(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+            seq_len = x.shape[0]
+            kvrx_and_y_bytes = x.numel() * 2
+            k_bytes = seq_len * kw.shape[1] * 4
+            v_bytes = seq_len * vw.shape[1] * 4
+            r_bytes = seq_len * rw.shape[1] * 2
+            buf = torch.empty((kvrx_and_y_bytes * 4 + k_bytes + v_bytes + r_bytes,), device=x.device, dtype=torch.int8)
+            x_plus_out_t = torch.empty_like(x)
+            xx = torch.ops.rwkv.att_seq(x, sx, ln_w, ln_b, k_mix, v_mix, r_mix, kw, vw, rw, ow, t_first, pp, aa, bb, t_decay, buf, x_plus_out_t)
+
+            return x_plus_out_t, xx[-1,:], aa, bb, pp
+
+        @MyFunction
+        def cuda_att_seq_naive(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
             T, C = x.size()
             xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
             sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
@@ -682,6 +719,69 @@ class RWKV(MyModule):
 
             out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
             return x + out, xx[-1,:], aa, bb, pp
+
+        @MyFunction
+        def cuda_ffn_seq_fp16(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+            krx_bytes = x.numel() * x.element_size()
+            vx_bytes = x.shape[0] * kw.shape[1] * x.element_size()
+            r_bytes = x.shape[0] * rw.shape[1] * x.element_size()
+            buf = torch.empty((krx_bytes * 2 + vx_bytes + r_bytes,), device=x.device, dtype=torch.int8)
+            x_plus_out = torch.empty_like(x)
+            xx = torch.ops.rwkv.ffn_seq(x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, buf, x_plus_out)
+            return x_plus_out, xx[-1:]
+
+        @MyFunction
+        def cuda_att_one_fp16(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+
+            kx = torch.empty_like(x)
+            vx = torch.empty_like(x)
+            rx = torch.empty_like(x)
+
+            k_t = torch.empty((kw.shape[0],), dtype=torch.float32, device=x.device)       
+            v_t = torch.empty((vw.shape[0],), dtype=torch.float32, device=x.device)       
+            r_t = torch.empty((rw.shape[0],), dtype=torch.float16, device=x.device)       
+            x_plus_out_t = torch.empty_like(x)
+            t1_t = torch.empty_like(x, dtype=torch.float32)
+            t2_t = torch.empty_like(x, dtype=torch.float32)
+            p_t = torch.empty_like(x, dtype=torch.float32)
+            xx = torch.ops.rwkv.att_one(x, ln_w, ln_b, sx, k_mix, v_mix, r_mix, kw, kx, vw, vx, rw, rx, ow, t_first, k_t, pp, ow, aa, bb, t_decay, v_t, r_t, x_plus_out_t, t1_t, t2_t, p_t)
+            return x_plus_out_t, xx, t1_t, t2_t, p_t
+
+        @MyFunction
+        def cuda_att_one_v5_fp16(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, t_decay, t_first, kvrw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+            H = t_decay.shape[0]
+            S = x.shape[-1] // H
+            tmp = torch.empty((1, x.shape[-1]), dtype=torch.float32, device=x.device)
+            buf = torch.empty((3 * x.numel() * 2 + 3 * x.numel() * 4 + H * S * S * 4 + x.numel() * 2 + H * S * S * 4,), dtype=torch.int8, device=x.device)
+            # two outputs
+            s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            x_plus_out = torch.empty_like(x)
+
+            # kvrx = torch.empty((3, x.numel()), dtype=x.dtype, device=x.device)
+            # kvr = torch.empty((3, 1, x.shape[-1]), dtype=torch.float32, device=x.device)
+            # a = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # tmp2 = torch.empty((1, x.shape[-1]), dtype=torch.float16, device=x.device)
+            # s1 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # s2 = torch.empty((H, S, S), dtype=torch.float32, device=x.device)
+            # x_plus_out = torch.empty_like(x)
+
+            # import pdb; pdb.set_trace()
+
+            xx = torch.ops.rwkv.att_one_v5(x, sx, s, ln_w, ln_b, lx_w, lx_b, kvr_mix, kvrw, ow, t_first, t_decay, tmp, buf, s2, x_plus_out) # type: ignore[reportGeneralTypeIssues]
+
+            # import pdb; pdb.set_trace()
+            return x_plus_out, xx, s2
+
+        @MyFunction
+        def cuda_ffn_one_fp16(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
+            krx_bytes = x.numel() * x.element_size()
+            vx_bytes = x.shape[0] * kw.shape[1] * x.element_size()
+            r_bytes = x.shape[0] * rw.shape[1] * x.element_size()
+            buf = torch.empty((krx_bytes * 2 + vx_bytes + r_bytes,), device=x.device, dtype=torch.int8)
+            x_plus_out = torch.empty_like(x)
+            xx = torch.ops.rwkv.ffn_one(x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, buf, x_plus_out) # type: ignore[reportGeneralTypeIssues]
+            return x_plus_out, xx
+
 
     ########################################################################################################
 
@@ -725,24 +825,34 @@ class RWKV(MyModule):
                 atype = dd.atype
                 wtype = dd.wtype
                 if seq_mode:
+                    ATT = self.att_seq if wtype != torch.uint8 else self.att_seq_i8
+                    FFN = self.ffn_seq if wtype != torch.uint8 else self.ffn_seq_i8
                     if 'cuda' in str(dev) and os.environ["RWKV_CUDA_ON"] == '1':
-                        ATT = self.cuda_att_seq if wtype != torch.uint8 else self.cuda_att_seq_i8
-                    else:
-                        ATT = self.att_seq if wtype != torch.uint8 else self.att_seq_i8
+                        if wtype == torch.float16:
+                            ATT = self.cuda_att_seq_fp16
+                            FFN = self.cuda_ffn_seq_fp16
+                        elif wtype == torch.uint8:
+                            ATT = self.cuda_att_seq_i8
+                        else:
+                            ATT = self.cuda_att_seq_naive
                     if self.version == 5:
                         ATT = self.att_seq_v5
-                    FFN = self.ffn_seq if wtype != torch.uint8 else self.ffn_seq_i8
                 else:
                     ATT = self.att_one if wtype != torch.uint8 else self.att_one_i8
+                    FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
                     if self.version == 5:
                         ATT = self.att_one_v5
-                    FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
+                    if 'cuda' in str(dev) and os.environ["RWKV_CUDA_ON"] == '1' and wtype == torch.float16:
+                        ATT = self.cuda_att_one_fp16
+                        FFN = self.cuda_ffn_one_fp16
+                        if self.version == 5:
+                            ATT = self.cuda_att_one_v5_fp16
 
                 x = x.to(dtype=atype, device=dev)
 
-                kw = w[f'{att}key.weight']
-                vw = w[f'{att}value.weight']
-                rw = w[f'{att}receptance.weight']
+                # kw = w[f'{att}key.weight']
+                # vw = w[f'{att}value.weight']
+                # rw = w[f'{att}receptance.weight']
                 ow = w[f'{att}output.weight']
                 if dd.stream:
                     kw = kw.to(device=dev, non_blocking=True)
@@ -782,9 +892,10 @@ class RWKV(MyModule):
                         x, state[i*3+0], state[i*3+1],
                         w[f'{bbb}ln1.weight'], w[f'{bbb}ln1.bias'],
                         w[f'{att}ln_x.weight'], w[f'{att}ln_x.bias'],
-                        w[f'{att}time_mix_k'], w[f'{att}time_mix_v'], w[f'{att}time_mix_r'],
+                        w[f'{att}time_mix_kvr'],
                         w[f'{att}time_decay'], w[f'{att}time_first'],
-                        kw, vw, rw, ow,
+                        w[f'{att}kvr.weight'], 
+                        ow,
                         kmx, krx, kmy, kry,
                         vmx, vrx, vmy, vry,
                         rmx, rrx, rmy, rry,
@@ -825,7 +936,7 @@ class RWKV(MyModule):
                     vmx, vrx, vmy, vry,
                     rmx, rrx, rmy, rry,                    
                     )
-                if dd.stream:                
+                if dd.stream:
                     del kw, vw, rw
                 
                 if self.RESCALE_LAYER > 0:
