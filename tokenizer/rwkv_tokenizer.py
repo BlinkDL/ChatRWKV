@@ -13,7 +13,7 @@ Benefits:
 
 * Good support of most languages, from European to CJK to Arabic and Hindi and more.
 
-* Clean vocab. Good for code too. Vocab size = 65525 (use 0 for <|endoftext|>).
+* Clean vocab. Good for code too. Vocab size = 65536 (use 0 for <|endoftext|>).
 
 * Good at numbers: the numerical tokens are '0'~'9', '10'~'99', ' 0'~' 9', ' 10'~' 99'.
 
