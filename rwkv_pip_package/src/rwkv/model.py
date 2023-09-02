@@ -32,7 +32,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
             name=f"wkv_cuda",
             sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
             verbose=True,
-            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"],
             is_python_module=False)
         DISABLE_CUBLAS_GEMM = False
     except:
@@ -41,7 +41,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
             name=f"wkv_cuda",
             sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu"],
             verbose=True,
-            extra_cuda_cflags=["-t 4", "-std=c++17", "--use_fast_math", "-O3", "--extra-device-vectorization"],
+            extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"],
             extra_cflags=["-DDISABLE_CUBLAS_GEMM"],
             is_python_module=False)
         DISABLE_CUBLAS_GEMM = True
