@@ -8,6 +8,7 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 
 os.environ['RWKV_JIT_ON'] = '1' #### set these before import RWKV
 os.environ["RWKV_CUDA_ON"] = '0'
+os.environ["RWKV_RESCALE_LAYER"] = '999' # must set this for RWKV-music models and "pip install rwkv --upgrade" to v0.8.12+
 
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
