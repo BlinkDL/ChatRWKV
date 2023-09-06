@@ -27,6 +27,7 @@ MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20221110-ctx40
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023'
 
 PAD_SEQ = [187]
+BENCHMARK_LOOP = 50
 
 ########################################################################################################
 
@@ -96,19 +97,13 @@ def record_time(name):
     if tt < time_slot[name]:
         time_slot[name] = tt
 
-for i in range(10):
-    time_ref = time.time_ns()
+time_ref = time.time_ns()
+for i in range(BENCHMARK_LOOP):
     out, state = model.forward(init_token, None)
     aa = out.detach().cpu().numpy()
-    record_time('fast')
-    print(f"fast {round(time_slot['fast'], 4)}s {aa}")
-
-    time_ref = time.time_ns()
-    for j in range(len(init_token)):
-        out, state = model.forward([init_token[j]], None if j == 0 else state)
-    aa = out.detach().cpu().numpy()
-    record_time('slow')
-    print(f"slow {round(time_slot['slow'], 4)}s {aa}")
+record_time('benchmark')
+tokens_per_second = BENCHMARK_LOOP * len(init_token) / time_slot['benchmark']
+print('tokens/s => :', round(tokens_per_second, 2))
 
 # exit(0)
 
