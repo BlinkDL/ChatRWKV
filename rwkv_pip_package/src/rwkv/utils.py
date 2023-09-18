@@ -60,7 +60,7 @@ class PIPELINE():
             sorted_ids = np.argsort(probs)
             sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
-            cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            cutoff = float(sorted_probs[np.argmax(cumulative_probs >= top_p)])
             probs[probs < cutoff] = 0
             if top_k < len(probs) and top_k > 0:
                 probs[sorted_ids[:-top_k]] = 0
@@ -74,7 +74,7 @@ class PIPELINE():
             sorted_probs = probs[sorted_ids]
             sorted_probs = torch.flip(sorted_probs, dims=(0,))
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
-            cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            cutoff = float(sorted_probs[np.argmax(cumulative_probs >= top_p)])
             probs[probs < cutoff] = 0
             if top_k < len(probs) and top_k > 0:
                 probs[sorted_ids[:-top_k]] = 0

@@ -8,12 +8,13 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 
 os.environ['RWKV_JIT_ON'] = '1' #### set these before import RWKV
 os.environ["RWKV_CUDA_ON"] = '0'
+os.environ["RWKV_RESCALE_LAYER"] = '999' # must set this for RWKV-music models and "pip install rwkv --upgrade" to v0.8.12+
 
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
 
 # MODEL_FILE = '/fsx/BlinkDL/HF-MODEL/rwkv-4-music/RWKV-4-MIDI-120M-v1-20230714-ctx4096' # MIDI model
-MODEL_FILE = '/fsx/BlinkDL/HF-MODEL/rwkv-4-music/RWKV-4-ABC-82M-v1-20230805-ctx1024' # ABC model (see https://abc.rectanglered.com)
+MODEL_FILE = '/fsx/BlinkDL/HF-MODEL/rwkv-5-music/RWKV-5-ABC-82M-v1-20230901-ctx1024' # ABC model (see https://abc.rectanglered.com)
 
 ABC_MODE = ('-ABC-' in MODEL_FILE)
 MIDI_MODE = ('-MIDI-' in MODEL_FILE)

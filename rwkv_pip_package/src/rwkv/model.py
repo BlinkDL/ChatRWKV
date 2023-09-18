@@ -134,7 +134,10 @@ class RWKV(MyModule):
         args.strategy_string = strategy
 
         # Rescale for fp16 mode: set x = x/2 every X layer (to avoid fp16 overflow)
-        self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
+        try:
+            self.RESCALE_LAYER = int(os.environ["RWKV_RESCALE_LAYER"]) # !!! NOTE: SEEMS YOU SHOULD SET IT TO 999 (disable) FOR RWKV-MUSIC MODELS !!!
+        except:
+            self.RESCALE_LAYER = 6 if 'fp16' in strategy else 0
         prxxx(f'RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]} RWKV_CUDA_ON {os.environ["RWKV_CUDA_ON"]} RESCALE_LAYER {self.RESCALE_LAYER}\n')
 
         args.MODEL_NAME = args.MODEL_NAME.strip()
@@ -153,7 +156,7 @@ class RWKV(MyModule):
                 prxxx(f"Converted model: strategy {w['_strategy']}, version {w['_version']}\n")
                 assert w['_strategy'] == args.strategy_string # if you are using a new strategy, re-convert the model
                 assert float(w['_version']) >= 0.7 # sometimes you should re-convert using latest convert_model.py
-                assert w['_rescale_layer'] == self.RESCALE_LAYER
+                assert w['_rescale_layer'] == self.RESCALE_LAYER # must use same RESCALE_LAYER to avoid mistakes
                 del w['_strategy']
                 del w['_version']
                 del w['_rescale_layer']
