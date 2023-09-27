@@ -176,6 +176,9 @@ class RWKV(MyModule):
                     self.version = max(5.1, self.version)
                 if int(self.version) == 5 and 'att.time_decay' in x:
                     args.n_head = w[x].shape[0]
+                    if len(w[x].shape) > 1:
+                        if w[x].shape[1] > 1:
+                            self.version = max(5.2, self.version)
 
             ####################### Compute strategy
 
@@ -292,6 +295,8 @@ class RWKV(MyModule):
                             w[x] = -torch.exp(w[x].float())
                         elif int(self.version) == 5:
                             w[x] = torch.exp(-torch.exp(w[x].float())).reshape(-1,1,1)
+                            if self.version == 5.2:
+                                w[x] = w[x].reshape(args.n_head, -1, 1)
                     elif '.time_first' in x: # need fp32 for this
                         if self.version == 4:
                             w[x] = w[x].float()
@@ -300,6 +305,8 @@ class RWKV(MyModule):
                                 w[x] = w[x].float().reshape(-1,1,1)
                             else:
                                 w[x] = torch.exp(w[x].float()).reshape(-1,1,1)
+                            if self.version == 5.2:
+                                w[x] = w[x].reshape(args.n_head, -1, 1)
                     elif '.ln_x' in x: # need fp32 for group_norm
                         w[x] = w[x].float()
                     else:
@@ -388,9 +395,47 @@ class RWKV(MyModule):
                 prxxx(f'Converted and saved. Now this will exit.')
                 exit(0)
             
+            if self.version == 5.2:
+                assert os.environ["RWKV_CUDA_ON"] == '1' # latest RWKV-5 requires os.environ["RWKV_CUDA_ON"] == '1' (will fix soon)
+                HEAD_SIZE = args.n_att // args.n_head
+                rwkv5 = load(name="rwkv5", sources=[f"{current_path}/cuda/rwkv5_op.cpp", f"{current_path}/cuda/rwkv5.cu"],
+                                verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}"])
+
+                class RWKV_5(torch.autograd.Function):
+                    @staticmethod
+                    def forward(ctx, B, T, C, H, state, r, k, v, w, u):
+                        with torch.no_grad():
+                            assert HEAD_SIZE == C // H
+                            ctx.B = B
+                            ctx.T = T
+                            ctx.C = C
+                            ctx.H = H
+                            assert state.dtype == torch.float32
+                            assert w.dtype == torch.float32
+                            assert r.is_contiguous()
+                            assert k.is_contiguous()
+                            assert v.is_contiguous()
+                            assert w.is_contiguous()                            
+                            assert u.is_contiguous()                            
+                            assert state.is_contiguous()
+
+                        y = torch.empty((B, T, C), device=w.device, dtype=r.dtype, memory_format=torch.contiguous_format)
+                        if r.dtype == torch.bfloat16:
+                            rwkv5.forward_bf16(B, T, C, H, state, r, k, v, w, u, y)
+                        elif r.dtype == torch.float16:
+                            rwkv5.forward_fp16(B, T, C, H, state, r, k, v, w, u, y)
+                        elif r.dtype == torch.float32:
+                            rwkv5.forward_fp32(B, T, C, H, state, r, k, v, w, u, y)
+                        return y, state
+                    
+                self.RWKV_5 = RWKV_5
+
             gc.collect()
             if 'cuda' in args.strategy_string:
                 torch.cuda.empty_cache()
+
+    def RUN_RWKV_5(self, B, T, C, H, state, r, k, v, w, u):
+        return self.RWKV_5.apply(B, T, C, H, state, r, k, v, w, u)            
 
     @MyFunction
     def torch_mm8_seq(self, x, w, mx, rx, my, ry):
@@ -725,6 +770,35 @@ class RWKV(MyModule):
 
     ########################################################################################################
 
+    def att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+        gx = xx * g_mix + sx * (1 - g_mix)
+
+        H = t_decay.shape[0]
+        N = x.shape[-1] // H
+        T = x.shape[0]
+
+        r = gemm(rx, rw, output_dtype=torch.float32)
+        k = gemm(kx, kw, output_dtype=torch.float32)
+        v = gemm(vx, vw, output_dtype=torch.float32)
+        g = F.silu(gemm(gx, gw))
+
+        out, s = self.RUN_RWKV_5(1, T, self.args.n_att, H, s.transpose(-1,-2).contiguous(), r, k, v, w=t_decay, u=t_first)
+        s = s.transpose(-1,-2)
+
+        out = out.reshape(T, H*N)
+        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = out.to(dtype=x.dtype) * g
+        out = gemm(out, ow)
+
+        return x + out, xx[-1,:], s
+
+    ########################################################################################################
+
     if os.environ["RWKV_CUDA_ON"] == '1':
         @MyFunction
         def cuda_att_seq(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
@@ -810,6 +884,8 @@ class RWKV(MyModule):
                         ATT = self.att_seq_v5
                     elif self.version == 5.1:
                         ATT = self.att_seq_v5_1
+                    elif self.version == 5.2:
+                        ATT = self.att_seq_v5_2
                     FFN = self.ffn_seq if wtype != torch.uint8 else self.ffn_seq_i8
                 else:
                     ATT = self.att_one if wtype != torch.uint8 else self.att_one_i8
@@ -817,6 +893,8 @@ class RWKV(MyModule):
                         ATT = self.att_one_v5
                     elif self.version == 5.1:
                         ATT = self.att_one_v5_1
+                    elif self.version == 5.2:
+                        ATT = self.att_one_v5_1 # same as v5.1
                     FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
 
                 x = x.to(dtype=atype, device=dev)
@@ -846,7 +924,7 @@ class RWKV(MyModule):
                 orx = w[f'{att}output.weight_rx'] if wtype == torch.uint8 else x
                 omy = w[f'{att}output.weight_my'] if wtype == torch.uint8 else x
                 ory = w[f'{att}output.weight_ry'] if wtype == torch.uint8 else x
-                if self.version == 5.1:
+                if self.version == 5.1 or self.version == 5.2:
                     gw = w[f'{att}gate.weight']
                     if dd.stream:
                         gw = gw.to(device=dev, non_blocking=True)
@@ -879,7 +957,7 @@ class RWKV(MyModule):
                         rmx, rrx, rmy, rry,
                         omx, orx, omy, ory,
                         )
-                elif self.version == 5.1:
+                elif self.version == 5.1 or self.version == 5.2:
                     x, state[i*3+0], state[i*3+1] = ATT(
                         x, state[i*3+0], state[i*3+1],
                         w[f'{bbb}ln1.weight'], w[f'{bbb}ln1.bias'],
