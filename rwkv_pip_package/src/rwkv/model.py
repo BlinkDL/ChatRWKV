@@ -113,6 +113,10 @@ else:
             output_dtype = a.dtype
         return (a @ b).to(output_dtype)
 
+if os.environ.get('RWKV_DML_ON') == '1':
+    import torch_directml
+    print("PyTorch with DirectML Enabled")
+
 ########################################################################################################
 
 class RWKV(MyModule):
@@ -123,7 +127,7 @@ class RWKV(MyModule):
         else:
             prxxx = lambda *args, **kwargs: None
 
-        STRATEGY_REGEX = r"^(?:(?:^|->) *(?:cuda(?::[\d]+)?|cpu|mps) (?:fp(?:16|32)|bf16)(?:i8|i4|i3)?(?: \*[\d]+\+?)? *)+$"
+        STRATEGY_REGEX = r"^(?:(?:^|->) *(?:cuda(?::[\d]+)?|cpu|mps|dml) (?:fp(?:16|32)|bf16)(?:i8|i4|i3)?(?: \*[\d]+\+?)? *)+$"
         if not re.match(STRATEGY_REGEX, strategy):
             raise ValueError("Invalid strategy. Please read https://pypi.org/project/rwkv/")
 
@@ -242,6 +246,8 @@ class RWKV(MyModule):
                         strategy[n].atype = s[i][1][0]
                         strategy[n].wtype = s[i][1][1]
                         strategy[n].stream = False
+                        if strategy[n].device == 'dml':
+                            strategy[n].device = torch_directml.device()
                         if i == stream_i and n >= (plan[i] - stream_count):
                             strategy[n].stream = True
                         break
