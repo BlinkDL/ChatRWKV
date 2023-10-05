@@ -32,6 +32,7 @@ if os.environ.get('RWKV_CUDA_ON') == '1':
             name=f"wkv_cuda",
             sources=[f"{current_path}/cuda/wrapper.cpp", f"{current_path}/cuda/operators.cu", f"{current_path}/cuda/gemm_fp16_cublas.cpp"],
             verbose=True,
+            extra_ldflags=["cublas.lib" if os.name == "nt" else ""],
             extra_cuda_cflags=["--use_fast_math", "-O3", "--extra-device-vectorization"],
             is_python_module=False)
         DISABLE_CUBLAS_GEMM = False
@@ -399,7 +400,7 @@ class RWKV(MyModule):
                 assert os.environ["RWKV_CUDA_ON"] == '1' # latest RWKV-5 requires os.environ["RWKV_CUDA_ON"] == '1' (will fix soon)
                 HEAD_SIZE = args.n_att // args.n_head
                 rwkv5 = load(name="rwkv5", sources=[f"{current_path}/cuda/rwkv5_op.cpp", f"{current_path}/cuda/rwkv5.cu"],
-                                verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}"])
+                                verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3" if os.name != "nt" else "", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}"])
 
                 class RWKV_5(torch.autograd.Function):
                     @staticmethod
