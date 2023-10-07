@@ -794,17 +794,16 @@ class RWKV(MyModule):
         v = gemm(vx, vw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
         g = F.silu(gemm(gx, gw))
 
-        out = []
+        out = torch.empty((T, H, S), dtype=r.dtype, device=r.device)
         for t in range(T):
             rt = r[:,t:t+1,:]
             kt = k[:,:,t:t+1]
             vt = v[:,t:t+1,:]
             at = gemm(kt, vt)
-            out.append(rt @ (t_first * at + s))
+            out[t] = (rt @ (t_first * at + s)).squeeze(1)
             s = at + t_decay * s
-        out = torch.cat(out, dim=1)
-        
-        out = out.transpose(0, 1).contiguous().reshape(T, H*S)
+
+        out = out.reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
         out = out.to(dtype=x.dtype) * g
         out = gemm(out, ow)
