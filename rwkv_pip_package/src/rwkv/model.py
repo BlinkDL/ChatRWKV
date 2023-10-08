@@ -847,7 +847,7 @@ class RWKV(MyModule):
             out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
             return x + out, xx[-1,:], aa, bb, pp
 
-        @MyFunction
+        # NOTE: decorate with @MyFunction causes JIT error
         def cuda_att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
             xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
             sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
