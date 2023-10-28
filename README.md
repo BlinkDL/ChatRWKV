@@ -1,13 +1,16 @@
 # ChatRWKV (pronounced as "RwaKuv", from 4 major params: R W K V)
+
+> RWKV homepage: https://www.rwkv.com/ https://wiki.rwkv.com/
+
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :) **中文使用教程，请往下看，在本页面底部。**
 
-**Raven 14B** (finetuned on Alpaca+ShareGPT+...) Demo: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
+**RWKV-5 World v2 1.5B** Demo: https://huggingface.co/spaces/BlinkDL/ChatRWKV-gradio
 
-**World 7B** (supports 100+ world languages) Demo: https://huggingface.co/spaces/BlinkDL/RWKV-World-7B
+![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
 
-**Download RWKV-4 weights:** https://huggingface.co/BlinkDL (**Use RWKV-4 models**. DO NOT use RWKV-4a and RWKV-4b models.)
+**RWKV-4 World v1 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-World-7B
 
-Note: RWKV-4-World is the best model: generation & chat & code in 100+ world languages, with the best English zero-shot & in-context learning ability too.
+**Download all RWKV model weights:** https://huggingface.co/BlinkDL
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 
