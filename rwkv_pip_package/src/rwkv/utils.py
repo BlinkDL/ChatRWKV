@@ -56,7 +56,7 @@ class PIPELINE():
         probs = F.softmax(logits.float(), dim=-1)
         top_k = int(top_k)
         if probs.device.type in ['cpu', 'dml']:
-            probs = probs.numpy()
+            probs = probs.cpu().numpy()
             sorted_ids = np.argsort(probs)
             sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
