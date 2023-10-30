@@ -55,8 +55,9 @@ class PIPELINE():
     def sample_logits(self, logits, temperature=1.0, top_p=0.85, top_k=0):
         probs = F.softmax(logits.float(), dim=-1)
         top_k = int(top_k)
-        if probs.device == torch.device('cpu'):
-            probs = probs.numpy()
+        # 'privateuseone' is the type of custom devices like `torch_directml.device()`
+        if probs.device.type in ['cpu', 'privateuseone']:
+            probs = probs.cpu().numpy()
             sorted_ids = np.argsort(probs)
             sorted_probs = probs[sorted_ids][::-1]
             cumulative_probs = np.cumsum(sorted_probs)
