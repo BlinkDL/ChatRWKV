@@ -55,7 +55,7 @@ class PIPELINE():
     def sample_logits(self, logits, temperature=1.0, top_p=0.85, top_k=0):
         probs = F.softmax(logits.float(), dim=-1)
         top_k = int(top_k)
-        if probs.device == torch.device('cpu'):
+        if probs.device.type in ['cpu', 'dml']:
             probs = probs.numpy()
             sorted_ids = np.argsort(probs)
             sorted_probs = probs[sorted_ids][::-1]
