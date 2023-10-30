@@ -88,7 +88,7 @@ else:
 
 if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
     @MyStatic
-    def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
+    def matmul_float(a, b, *, output_dtype: Optional[torch.dtype]=None):
         if output_dtype is None:
             output_dtype = a.dtype
         if a.dtype == b.dtype == torch.float16 and a.device.type == 'cuda':
@@ -108,10 +108,10 @@ if os.environ.get('RWKV_CUDA_ON') == '1' and not DISABLE_CUBLAS_GEMM:
             return c
         else:
             return (a @ b).to(output_dtype)
+
 else:
-    def gemm(a, b, output_dtype: Optional[torch.dtype]=None):
-        if output_dtype is None:
-            output_dtype = a.dtype
+    @MyStatic
+    def matmul_float(a, b, *, output_dtype: Optional[torch.dtype]=None):
         return (a @ b).to(output_dtype)
 
 if os.environ.get('RWKV_DML_ON') == '1':
@@ -474,6 +474,23 @@ class RWKV(MyModule):
         def mm8_one(self, x, w, mx, rx, my, ry):
             return self.torch_mm8_one(x, w, mx, rx, my, ry)
 
+    @MyFunction
+    def mm8(self, x, w, mx, rx, my, ry):
+        if len(x.shape) == 1:
+            return self.mm8_one(x, w, mx, rx, my, ry)
+        return self.mm8_seq(x, w, mx, rx, my, ry)
+
+    @MyStatic
+    def matmul(self, a, b, mx=None, rx=None, my=None, ry=None, *, output_dtype: Optional[torch.dtype]=None) -> torch.Tensor:
+        if output_dtype is None:
+            output_dtype = a.dtype
+        if b.dtype == torch.float16 or b.dtype == torch.float32:
+            assert a.dtype == b.dtype
+            return matmul_float(a, b, output_dtype=output_dtype)
+        if b.dtype == torch.uint8:
+            return self.mm8(a, b, mx, rx, my, ry).to(output_dtype)
+
+
     ########################################################################################################
 
     @MyFunction
@@ -482,22 +499,11 @@ class RWKV(MyModule):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(gemm(rx, rw))
-        vx = torch.square(torch.relu(gemm(kx, kw)))
-        out = r * gemm(vx, vw)
+        r = torch.sigmoid(self.matmul(rx, rw, rmx, rrx, rmy, rry))
+        vx = torch.square(torch.relu(self.matmul(kx, kw, kmx, krx, kmy, kry)))
+        out = r * self.matmul(vx, vw, vmx, vrx, vmy, vry)
         return x + out, xx
 
-    @MyFunction
-    def ffn_one_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(self.mm8_one(rx, rw, rmx, rrx, rmy, rry))
-        vx = torch.square(torch.relu(self.mm8_one(kx, kw, kmx, krx, kmy, kry)))
-        out = r * (self.mm8_one(vx, vw, vmx, vrx, vmy, vry))
-        return x + out, xx
-    
     ########################################################################################################
 
     @MyFunction
@@ -507,21 +513,9 @@ class RWKV(MyModule):
         kx = xx * k_mix + sx * (1 - k_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(gemm(rx, rw))
-        vx = torch.square(torch.relu(gemm(kx, kw)))
-        out = r * gemm(vx, vw)
-        return x + out, xx[-1,:]
-
-    @MyFunction
-    def ffn_seq_i8(self, x, sx, ln_w, ln_b, k_mix, r_mix, kw, vw, rw, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
-        kx = xx * k_mix + sx * (1 - k_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
-        vx = torch.square(torch.relu(self.mm8_seq(kx, kw, kmx, krx, kmy, kry)))
-        out = r * (self.mm8_seq(vx, vw, vmx, vrx, vmy, vry))
+        r = torch.sigmoid(self.matmul(rx, rw, rmx, rrx, rmy, rry))
+        vx = torch.square(torch.relu(self.matmul(kx, kw, kmx, krx, kmy, kry)))
+        out = r * self.matmul(vx, vw, vmx, vrx, vmy, vry)
         return x + out, xx[-1,:]
 
     ########################################################################################################
@@ -533,9 +527,9 @@ class RWKV(MyModule):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(gemm(rx, rw))
-        k = gemm(kx, kw, output_dtype=torch.float32)
-        v = gemm(vx, vw, output_dtype=torch.float32)
+        r = torch.sigmoid(self.matmul(rx, rw, rmx, rrx, rmy, rry))
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32)
 
         ww = t_first + k
         p = torch.maximum(pp, ww)
@@ -547,31 +541,7 @@ class RWKV(MyModule):
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
 
-        out = gemm(r * wkv, ow)
-        return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
-
-    @MyFunction
-    def att_one_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        kx = xx * k_mix + sx * (1 - k_mix)
-        vx = xx * v_mix + sx * (1 - v_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(self.mm8_one(rx, rw, rmx, rrx, rmy, rry))
-        k = (self.mm8_one(kx, kw, kmx, krx, kmy, kry)).float()
-        v = (self.mm8_one(vx, vw, vmx, vrx, vmy, vry)).float()
-
-        ww = t_first + k
-        p = torch.maximum(pp, ww)
-        e1 = torch.exp(pp - p)
-        e2 = torch.exp(ww - p)
-        wkv = ((e1 * aa + e2 * v) / (e1 * bb + e2)).to(dtype=x.dtype)
-        ww = t_decay + pp
-        p = torch.maximum(ww, k)
-        e1 = torch.exp(ww - p)
-        e2 = torch.exp(k - p)
-
-        out = self.mm8_one(r * wkv, ow, omx, orx, omy, ory)
+        out = self.matmul(r * wkv, ow, omx, orx, omy, ory)
         return x + out, xx, e1 * aa + e2 * v, e1 * bb + e2, p
 
     ########################################################################################################
@@ -584,9 +554,9 @@ class RWKV(MyModule):
         vx = xx * v_mix + sx * (1 - v_mix)
         rx = xx * r_mix + sx * (1 - r_mix)
 
-        r = torch.sigmoid(gemm(rx, rw))
-        k = gemm(kx, kw, output_dtype=torch.float32)
-        v = gemm(vx, vw, output_dtype=torch.float32)
+        r = torch.sigmoid(self.matmul(rx, rw, rmx, rrx, rmy, rry))
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32)
 
         T = x.shape[0]
         for t in range(T):
@@ -604,38 +574,7 @@ class RWKV(MyModule):
             aa = e1 * aa + e2 * vv
             bb = e1 * bb + e2
             pp = p
-        out = gemm(r * sx, ow)
-        return x + out, xx[-1,:], aa, bb, pp
-
-    @MyFunction
-    def att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
-        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
-        kx = xx * k_mix + sx * (1 - k_mix)
-        vx = xx * v_mix + sx * (1 - v_mix)
-        rx = xx * r_mix + sx * (1 - r_mix)
-
-        r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
-        k = self.mm8_seq(kx, kw, kmx, krx, kmy, kry).float()
-        v = self.mm8_seq(vx, vw, vmx, vrx, vmy, vry).float()
-
-        T = x.shape[0]
-        for t in range(T):
-            kk = k[t]
-            vv = v[t]
-            ww = t_first + kk
-            p = torch.maximum(pp, ww)
-            e1 = torch.exp(pp - p)
-            e2 = torch.exp(ww - p)
-            sx[t] = ((e1 * aa + e2 * vv) / (e1 * bb + e2)).to(dtype=x.dtype)
-            ww = t_decay + pp
-            p = torch.maximum(ww, kk)
-            e1 = torch.exp(ww - p)
-            e2 = torch.exp(kk - p)
-            aa = e1 * aa + e2 * vv
-            bb = e1 * bb + e2
-            pp = p
-        out = self.mm8_seq(r * sx, ow, omx, orx, omy, ory)
+        out = self.matmul(r * sx, ow, omx, orx, omy, ory)
         return x + out, xx[-1,:], aa, bb, pp
 
     ########################################################################################################
@@ -650,18 +589,18 @@ class RWKV(MyModule):
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
+        r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(H, 1, S)
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(H, S, 1)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(H, 1, S)
         
-        a = gemm(k, v)
+        a = self.matmul(k, v)
         out = r @ (t_first * a + s)
         s = a + t_decay * s
 
         out = out.flatten()
         out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b).squeeze(0)
         out = out.to(dtype=x.dtype)
-        out = gemm(out, ow)
+        out = self.matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx, s
 
@@ -690,9 +629,9 @@ class RWKV(MyModule):
         w = w[:, :-T].reshape(-1, T, 2 * T - 1)
         w = w[:, :, T-1:].reshape(H, T, T)
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
 
         out = ((r @ k) * w) @ v + (r @ s) * wb
         s = ws * s + (k * wk) @ v
@@ -700,14 +639,14 @@ class RWKV(MyModule):
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
         out = out.to(dtype=x.dtype)
-        out = gemm(out, ow)
+        out = self.matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx[-1,:], s
 
     ########################################################################################################
 
     @MyFunction
-    def att_one_v5_1(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_one_v5_1(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, gmx, grx, gmy, gry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         kx = xx * k_mix + sx * (1 - k_mix)
         vx = xx * v_mix + sx * (1 - v_mix)
@@ -717,19 +656,19 @@ class RWKV(MyModule):
         H = t_decay.shape[0]
         S = x.shape[-1] // H
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(H, 1, S)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(H, S, 1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(H, 1, S)
-        g = F.silu(gemm(gx, gw))
+        r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(H, 1, S)
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(H, S, 1)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(H, 1, S)
+        g = F.silu(self.matmul(gx, gw, gmx, grx, gmy, gry))
         
-        a = gemm(k, v)
+        a = self.matmul(k, v)
         out = r @ (t_first * a + s)
         s = a + t_decay * s
 
         out = out.flatten()
         out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b).squeeze(0)
         out = out.to(dtype=x.dtype) * g
-        out = gemm(out, ow)
+        out = self.matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx, s
 
@@ -759,10 +698,10 @@ class RWKV(MyModule):
         w = w[:, :-T].reshape(-1, T, 2 * T - 1)
         w = w[:, :, T-1:].reshape(H, T, T)
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
-        g = F.silu(gemm(gx, gw))
+        r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        g = F.silu(self.matmul(gx, gw, gmx, grx, gmy, gry))
 
         out = ((r @ k) * w) @ v + (r @ s) * wb
         s = ws * s + (k * wk) @ v
@@ -770,14 +709,14 @@ class RWKV(MyModule):
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
         out = out.to(dtype=x.dtype) * g
-        out = gemm(out, ow)
+        out = self.matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx[-1,:], s
 
     ########################################################################################################
 
     @MyFunction
-    def att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+    def att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, gmx, grx, gmy, gry, omx, orx, omy, ory):
         xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
         sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
         kx = xx * k_mix + sx * (1 - k_mix)
@@ -789,24 +728,24 @@ class RWKV(MyModule):
         S = x.shape[-1] // H
         T = x.shape[0]
 
-        r = gemm(rx, rw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
-        k = gemm(kx, kw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
-        v = gemm(vx, vw, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
-        g = F.silu(gemm(gx, gw))
+        r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
+        v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        g = F.silu(self.matmul(gx, gw, gmx, grx, gmy, gry))
 
         out = torch.empty((T, H, S), dtype=r.dtype, device=r.device)
         for t in range(T):
             rt = r[:,t:t+1,:]
             kt = k[:,:,t:t+1]
             vt = v[:,t:t+1,:]
-            at = gemm(kt, vt)
+            at = self.matmul(kt, vt)
             out[t] = (rt @ (t_first * at + s)).squeeze(1)
             s = at + t_decay * s
 
         out = out.reshape(T, H*S)
         out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
         out = out.to(dtype=x.dtype) * g
-        out = gemm(out, ow)
+        out = self.matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx[-1,:], s
 
@@ -822,33 +761,16 @@ class RWKV(MyModule):
             vx = xx * v_mix + sx * (1 - v_mix)
             rx = xx * r_mix + sx * (1 - r_mix)
 
-            r = torch.sigmoid(gemm(rx, rw))
-            k = gemm(kx, kw, output_dtype=torch.float32)
-            v = gemm(vx, vw, output_dtype=torch.float32)
-            y, aa, bb, pp = cuda_wkv(T, aa.shape[0], t_decay, t_first, k, v, aa, bb, pp)
-            
-            out = gemm(r * y.to(x.dtype), ow)
-            return x + out, xx[-1,:], aa, bb, pp
-
-        @MyFunction
-        def cuda_att_seq_i8(self, x, sx, aa, bb, pp, ln_w, ln_b, k_mix, v_mix, r_mix, t_decay, t_first, kw, vw, rw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
-            T, C = x.shape
-            xx = F.layer_norm(x, (C,), weight=ln_w, bias=ln_b)
-            sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
-            kx = xx * k_mix + sx * (1 - k_mix)
-            vx = xx * v_mix + sx * (1 - v_mix)
-            rx = xx * r_mix + sx * (1 - r_mix)
-
-            r = torch.sigmoid(self.mm8_seq(rx, rw, rmx, rrx, rmy, rry))
-            k = self.mm8_seq(kx, kw, kmx, krx, kmy, kry)
-            v = self.mm8_seq(vx, vw, vmx, vrx, vmy, vry)
+            r = torch.sigmoid(self.matmul(rx, rw, rmx, rrx, rmy, rry))
+            k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32)
+            v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32)
             y, aa, bb, pp = cuda_wkv(T, C, t_decay, t_first, k, v, aa, bb, pp)
 
-            out = self.mm8_seq(r * y, ow, omx, orx, omy, ory)
+            out = self.matmul(r * y.to(x.dtype), ow, omx, orx, omy, ory)
             return x + out, xx[-1,:], aa, bb, pp
 
         # NOTE: decorate with @MyFunction causes JIT error
-        def cuda_att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, omx, orx, omy, ory):
+        def cuda_att_seq_v5_2(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, gmx, grx, gmy, gry, omx, orx, omy, ory):
             xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
             sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
             kx = xx * k_mix + sx * (1 - k_mix)
@@ -860,10 +782,10 @@ class RWKV(MyModule):
             N = x.shape[-1] // H
             T = x.shape[0]
 
-            r = gemm(rx, rw, output_dtype=torch.float32)
-            k = gemm(kx, kw, output_dtype=torch.float32)
-            v = gemm(vx, vw, output_dtype=torch.float32)
-            g = F.silu(gemm(gx, gw))
+            r = self.matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32)
+            k = self.matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32)
+            v = self.matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32)
+            g = F.silu(self.matmul(gx, gw, gmx, grx, gmy, gry))
 
             out, s = self.RUN_RWKV_5(1, T, self.args.n_att, H, s.transpose(-1,-2).contiguous(), r, k, v, w=t_decay, u=t_first)
             s = s.transpose(-1,-2)
@@ -871,7 +793,7 @@ class RWKV(MyModule):
             out = out.reshape(T, H*N)
             out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
             out = out.to(dtype=x.dtype) * g
-            out = gemm(out, ow)
+            out = self.matmul(out, ow, omx, orx, omy, ory)
 
             return x + out, xx[-1,:], s
 
@@ -920,9 +842,9 @@ class RWKV(MyModule):
                 if seq_mode:
                     cuda_applicable = os.environ["RWKV_CUDA_ON"] == '1' and 'cuda' in str(dev)
                     if cuda_applicable:
-                        ATT = self.cuda_att_seq if wtype != torch.uint8 else self.cuda_att_seq_i8
+                        ATT = self.cuda_att_seq
                     else:
-                        ATT = self.att_seq if wtype != torch.uint8 else self.att_seq_i8
+                        ATT = self.att_seq
                     if self.version == 5:
                         ATT = self.att_seq_v5
                     elif self.version == 5.1:
@@ -931,16 +853,16 @@ class RWKV(MyModule):
                         ATT = self.att_seq_v5_2
                         if cuda_applicable:
                             ATT = self.cuda_att_seq_v5_2
-                    FFN = self.ffn_seq if wtype != torch.uint8 else self.ffn_seq_i8
+                    FFN = self.ffn_seq
                 else:
-                    ATT = self.att_one if wtype != torch.uint8 else self.att_one_i8
+                    ATT = self.att_one
                     if self.version == 5:
                         ATT = self.att_one_v5
                     elif self.version == 5.1:
                         ATT = self.att_one_v5_1
                     elif self.version == 5.2:
                         ATT = self.att_one_v5_1 # same as v5.1
-                    FFN = self.ffn_one if wtype != torch.uint8 else self.ffn_one_i8
+                    FFN = self.ffn_one
 
                 x = x.to(dtype=atype, device=dev)
 
@@ -1013,6 +935,7 @@ class RWKV(MyModule):
                         kmx, krx, kmy, kry,
                         vmx, vrx, vmy, vry,
                         rmx, rrx, rmy, rry,
+                        gmx, grx, gmy, gry,
                         omx, orx, omy, ory,
                         )
                 if dd.stream:
