@@ -126,7 +126,7 @@ def mm8(x: torch.Tensor, w: torch.Tensor, mx: torch.Tensor, rx: torch.Tensor, my
 def matmul(a, b, mx: Optional[torch.Tensor]=None, rx: Optional[torch.Tensor]=None, my: Optional[torch.Tensor]=None, ry: Optional[torch.Tensor]=None, output_dtype: Optional[torch.dtype]=None) -> torch.Tensor:
     if output_dtype is None:
         output_dtype = a.dtype
-    if b.dtype == torch.float16 or b.dtype == torch.float32:
+    if b.dtype in [torch.float16, torch.bfloat16, torch.float32]:
         assert a.dtype == b.dtype
         return matmul_float(a, b, output_dtype=output_dtype)
     elif b.dtype == torch.uint8:
