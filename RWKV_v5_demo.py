@@ -103,12 +103,14 @@ def sample_logits(out, temperature=1.0, top_p=0.8):
 
 ########################################################################################################
 
-tokenizer = RWKV_TOKENIZER("tokenizer/rwkv_vocab_v20230424.txt")
+tokenizer = RWKV_TOKENIZER("/fsx/BlinkDL/CODE/_PUBLIC_/ChatRWKV/tokenizer/rwkv_vocab_v20230424.txt")
+
+# THIS IS NOW UPDATED TO SUPPORT LATEST RWKV-5 WORLD v2 MODELS
 
 args = types.SimpleNamespace()
-args.MODEL_NAME = '/fsx/BlinkDL/CODE/_PUBLIC_/RWKV-LM/RWKV-v4neo/world/0.1-run1r/rwkv-30'
-args.n_layer = 12
-args.n_embd = 768
+args.MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/temp/RWKV-5-World-0B4-v2-OnlyForTest_71%_trained-20231104-ctx4096'
+args.n_layer = 24
+args.n_embd = 1024
 args.vocab_size = 65536
 
 context = "\nElon Musk has"
@@ -128,8 +130,8 @@ class RWKV_RNN(MyModule):
         for k in w.keys():
             w[k] = w[k].float() # convert to f32 type
             if      '.time_' in k: w[k] = w[k].squeeze()
-            if '.time_decay' in k: w[k] = torch.exp(-torch.exp(w[k])).reshape(-1,1,1)
-            if '.time_first' in k: w[k] = torch.exp(w[k]).reshape(-1,1,1)
+            if '.time_decay' in k: w[k] = torch.exp(-torch.exp(w[k])).unsqueeze(-1)
+            if '.time_faaaa' in k: w[k] = w[k].unsqueeze(-1)
 
         self.n_head = w['blocks.0.att.time_decay'].shape[0]
         self.head_size = w['blocks.0.ln1.weight'].shape[0] // self.n_head
@@ -164,7 +166,7 @@ class RWKV_RNN(MyModule):
         return r * (vw @ k)
 
     @MyFunction
-    def time_mixing(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow, ln_w, ln_b):
+    def time_mixing(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_mix_g, time_first, time_decay, kw, vw, rw, gw, ow, ln_w, ln_b):
         H = self.n_head
         S = self.head_size
 
@@ -172,10 +174,13 @@ class RWKV_RNN(MyModule):
         xk = x * time_mix_k + state[i1] * (1 - time_mix_k)
         xv = x * time_mix_v + state[i1] * (1 - time_mix_v)
         xr = x * time_mix_r + state[i1] * (1 - time_mix_r)
+        xg = x * time_mix_g + state[i1] * (1 - time_mix_g)
         state[i1] = x
+
         r = (rw @ xr).view(H, 1, S)
         k = (kw @ xk).view(H, S, 1)
         v = (vw @ xv).view(H, 1, S)
+        g = F.silu(gw @ xg)
 
         s = state[(2+S)*i+2:(2+S)*(i+1), :].reshape(H, S, S)
 
@@ -187,7 +192,7 @@ class RWKV_RNN(MyModule):
         state[(2+S)*i+2:(2+S)*(i+1), :] = s.reshape(S, -1)
         x = x.flatten()
 
-        x = F.group_norm(x.unsqueeze(0), num_groups=H, weight=ln_w, bias=ln_b).squeeze(0)
+        x = F.group_norm(x.unsqueeze(0), num_groups=H, weight=ln_w, bias=ln_b).squeeze(0) * g
         return ow @ x
 
     def forward(self, token, state):
@@ -200,8 +205,8 @@ class RWKV_RNN(MyModule):
             for i in range(self.args.n_layer):
                 att = self.w.blocks[i].att
                 x = x + self.time_mixing(self.layer_norm(x, self.w.blocks[i].ln1), state, i, 
-                    att.time_mix_k, att.time_mix_v, att.time_mix_r, att.time_first, att.time_decay, 
-                    att.key.weight, att.value.weight, att.receptance.weight, att.output.weight,
+                    att.time_mix_k, att.time_mix_v, att.time_mix_r, att.time_mix_g, att.time_faaaa, att.time_decay, 
+                    att.key.weight, att.value.weight, att.receptance.weight, att.gate.weight, att.output.weight,
                     att.ln_x.weight, att.ln_x.bias)
                 ffn = self.w.blocks[i].ffn
                 x = x + self.channel_mixing(self.layer_norm(x, self.w.blocks[i].ln2), state, i, 
@@ -227,9 +232,12 @@ for TRIAL in range(NUM_TRIALS):
     for i in range(LENGTH_PER_TRIAL):
         token = sample_logits(out, TEMPERATURE, TOP_P)
         all_tokens += [token]
-        tmp = tokenizer.decode(all_tokens[out_last:])
-        if '\ufffd' not in tmp: # only print when we have a valid utf-8 string
-            print(tmp, end="", flush=True)
-            out_last = i + 1
+        try:
+            tmp = tokenizer.decode(all_tokens[out_last:])
+            if '\ufffd' not in tmp: # only print when we have a valid utf-8 string
+                print(tmp, end="", flush=True)
+                out_last = i + 1
+        except:
+            pass
         out, state = model.forward(token, state)       
 print('\n')
