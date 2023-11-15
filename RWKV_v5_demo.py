@@ -192,7 +192,7 @@ class RWKV_RNN(MyModule):
         state[(2+S)*i+2:(2+S)*(i+1), :] = s.reshape(S, -1)
         x = x.flatten()
 
-        x = F.group_norm(x.unsqueeze(0), num_groups=H, weight=ln_w, bias=ln_b).squeeze(0) * g
+        x = F.group_norm(x.unsqueeze(0), num_groups=H, weight=ln_w, bias=ln_b, eps = 64e-5).squeeze(0) * g # same as gn(x/8, eps=1e-5)
         return ow @ x
 
     def forward(self, token, state):

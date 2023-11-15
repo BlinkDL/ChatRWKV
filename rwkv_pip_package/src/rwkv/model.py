@@ -602,7 +602,7 @@ class RWKV(MyModule):
         s = a + t_decay * s
 
         out = out.flatten()
-        out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b).squeeze(0)
+        out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5).squeeze(0)
         out = out.to(dtype=x.dtype)
         out = matmul(out, ow, omx, orx, omy, ory)
 
@@ -641,7 +641,7 @@ class RWKV(MyModule):
         s = ws * s + (k * wk) @ v
         
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
-        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5)
         out = out.to(dtype=x.dtype)
         out = matmul(out, ow, omx, orx, omy, ory)
 
@@ -670,7 +670,7 @@ class RWKV(MyModule):
         s = a + t_decay * s
 
         out = out.flatten()
-        out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b).squeeze(0)
+        out = F.group_norm(out.unsqueeze(0), num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5).squeeze(0)
         out = out.to(dtype=x.dtype) * g
         out = matmul(out, ow, omx, orx, omy, ory)
 
@@ -711,7 +711,7 @@ class RWKV(MyModule):
         s = ws * s + (k * wk) @ v
         
         out = out.transpose(0, 1).contiguous().reshape(T, H*S)
-        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5)
         out = out.to(dtype=x.dtype) * g
         out = matmul(out, ow, omx, orx, omy, ory)
 
@@ -747,7 +747,7 @@ class RWKV(MyModule):
             s = at + t_decay * s
 
         out = out.reshape(T, H*S)
-        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5)
         out = out.to(dtype=x.dtype) * g
         out = matmul(out, ow, omx, orx, omy, ory)
 
@@ -795,7 +795,7 @@ class RWKV(MyModule):
             s = s.transpose(-1,-2)
 
             out = out.reshape(T, H*N)
-            out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+            out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b, eps = 64e-5)
             out = out.to(dtype=x.dtype) * g
             out = matmul(out, ow, omx, orx, omy, ory)
 

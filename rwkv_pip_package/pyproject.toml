@@ -1,6 +1,6 @@
 [project]
 name = "rwkv"
-version = "0.8.13"
+version = "0.8.21"
 authors = [
   { name="Bo PENG" },
 ]
