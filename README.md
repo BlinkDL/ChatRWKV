@@ -24,6 +24,20 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
+https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel), supports rwkv5
+
+https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server, supports rwkv5
+
+https://github.com/saharNooby/rwkv.cpp Fast CPU/cuBLAS/CLBlast inference: int4/int8/fp16/fp32, supports rwkv5
+
+https://github.com/daquexian/faster-rwkv supports rwkv5
+
+https://github.com/mlc-ai/mlc-llm/pull/1275 supports rwkv5
+
+https://github.com/RWKV/RWKV-infctx-trainer Infctx trainer
+
+https://github.com/Blealtan/RWKV-LM-LoRA LoRA finetuning
+
 **World demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_WORLD.py
 
 **Raven Q&A demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/v2/benchmark_more.py
