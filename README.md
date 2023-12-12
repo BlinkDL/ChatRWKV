@@ -24,6 +24,8 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
+**nanoRWKV**: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel, works for any GPU/CPU)
+
 https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel), supports rwkv5
 
 https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server, supports rwkv5
