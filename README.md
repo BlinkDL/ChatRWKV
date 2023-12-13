@@ -10,9 +10,17 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 ![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
 
-**Download raw cutting-edge RWKV weights:** https://huggingface.co/BlinkDL
+**RWKV-LM main repo**: https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
-**Download HF-compatible RWKV weights:** https://huggingface.co/RWKV
+## RWKV Discord: https://discord.gg/bDSBUMeFpc (7k+ members)
+
+**Twitter**: https://twitter.com/BlinkDL_AI
+
+**Homepage**: https://www.rwkv.com/
+
+**Raw cutting-edge RWKV weights:** https://huggingface.co/BlinkDL
+
+**HF-compatible RWKV weights:** https://huggingface.co/RWKV
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 
@@ -26,7 +34,7 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
-**nanoRWKV**: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel, works for any GPU/CPU)
+**nanoRWKV**: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel to train, works for any GPU/CPU)
 
 https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel), supports rwkv5
 
@@ -47,12 +55,6 @@ https://github.com/Blealtan/RWKV-LM-LoRA LoRA finetuning
 **Raven Q&A demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/v2/benchmark_more.py
 
 ![ChatRWKV-strategy](ChatRWKV-strategy.png)
-
-## RWKV Discord: https://discord.gg/bDSBUMeFpc (let's build together)
-
-**Twitter:** https://twitter.com/BlinkDL_AI
-
-**RWKV LM:** https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
 **🔥 RWKV in 150 lines 🔥** (model, inference, text generation): https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py
 
