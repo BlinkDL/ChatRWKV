@@ -10,7 +10,9 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 ![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
 
-**Download all RWKV model weights:** https://huggingface.co/BlinkDL
+**Download raw cutting-edge RWKV weights:** https://huggingface.co/BlinkDL
+
+**Download HF-compatible RWKV weights:** https://huggingface.co/RWKV
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
 
