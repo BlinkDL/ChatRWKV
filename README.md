@@ -68,6 +68,10 @@ https://github.com/Blealtan/RWKV-LM-LoRA LoRA finetuning
 
 ![RWKV-paper](RWKV-paper.png)
 
+RWKV v6 illustrated:
+
+![RWKV-v6](rwkv-x060.png)
+
 **Cool Community RWKV Projects**:
 
 https://github.com/saharNooby/rwkv.cpp fast i4 i8 fp16 fp32 CPU inference using [ggml](https://github.com/ggerganov/ggml)
@@ -102,6 +106,8 @@ Here is https://huggingface.co/BlinkDL/rwkv-4-raven/blob/main/RWKV-4-Raven-14B-v
 When you build a RWKV chatbot, always check the text corresponding to the state, in order to prevent bugs.
 
 1. Never call raw forward() directly. Instead, put it in a function that will record the text corresponding to the state.
+
+**(For v4-raven models, use Bob/Alice. For v4/v5/v6-world models, use User/Assistant)**
 
 2. The best chat format (check whether your text is of this format):
 ```Bob: xxxxxxxxxxxxxxxxxx\n\nAlice: xxxxxxxxxxxxx\n\nBob: xxxxxxxxxxxxxxxx\n\nAlice:```
