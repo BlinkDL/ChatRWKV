@@ -88,14 +88,14 @@ for q in QUESTIONS:
     out_str = ''
     occurrence = {}
     state = None
-    ctx = f'Question: {q.strip()}\n\nAnswer:' # !!! do not use Q/A (corrupted by a dataset) or Bob/Alice (not used in training) !!!
+    ctx = f'User: {q.strip()}\n\nAssistant:'
     print(ctx, end = '')
     for i in range(200):
         tokens = PAD_TOKENS + pipeline.encode(ctx) if i == 0 else [token]
         
         out, state = pipeline.model.forward(tokens, state)
         for n in occurrence:
-            out[n] -= (0.4 + occurrence[n] * 0.4) # repetition penalty
+            out[n] -= (0 + occurrence[n] * 1.0) # repetition penalty
         
         token = pipeline.sample_logits(out, temperature=1.0, top_p=0.1)
         if token == 0: break # exit when 'endoftext'
