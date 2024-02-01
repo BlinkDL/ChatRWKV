@@ -109,10 +109,11 @@ class PIPELINE():
             all_tokens += [token]
             for xxx in occurrence:
                 occurrence[xxx] *= args.alpha_decay
-            if token not in occurrence:
-                occurrence[token] = 1
-            else:
-                occurrence[token] += 1
+            if self.decode([token]) not in ' \r\n\t,.;?!"\':0123456789+-*/=#@$%^&_`~|<>\\()[]{}，。；“”：？！（）【】':
+                if token not in occurrence:
+                    occurrence[token] = 1
+                else:
+                    occurrence[token] += 1
             # print(occurrence) # debug
             
             # output

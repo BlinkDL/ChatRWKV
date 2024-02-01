@@ -53,6 +53,7 @@ from rwkv.utils import PIPELINE, PIPELINE_ARGS
 # download models: https://huggingface.co/BlinkDL
 model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
 pipeline = PIPELINE(model, "20B_tokenizer.json") # 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
+# use pipeline = PIPELINE(model, "rwkv_vocab_v20230424") for rwkv "world" models
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(ctx, end='')
