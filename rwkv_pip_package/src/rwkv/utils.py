@@ -53,6 +53,9 @@ class PIPELINE():
         return self.tokenizer.decode(x)
 
     def sample_logits(self, logits, temperature=1.0, top_p=0.85, top_k=0):
+        if temperature == 0:
+            temperature = 1.0
+            top_p = 0
         probs = F.softmax(logits.float(), dim=-1)
         top_k = int(top_k)
         # 'privateuseone' is the type of custom devices like `torch_directml.device()`
@@ -109,11 +112,17 @@ class PIPELINE():
             all_tokens += [token]
             for xxx in occurrence:
                 occurrence[xxx] *= args.alpha_decay
-            if self.decode([token]) not in ' \r\n\t,.;?!"\':0123456789+-*/=#@$%^&_`~|<>\\()[]{}，。；“”：？！（）【】':
-                if token not in occurrence:
-                    occurrence[token] = 1
-                else:
-                    occurrence[token] += 1
+            
+            ttt = self.decode([token])
+            www = 1
+            if ttt in ' \t0123456789':
+                www = 0
+            # elif ttt in '\r\n,.;?!"\':+-*/=#@$%^&_`~|<>\\()[]{}，。；“”：？！（）【】':
+            #     www = 0.5
+            if token not in occurrence:
+                occurrence[token] = www
+            else:
+                occurrence[token] += www
             # print(occurrence) # debug
             
             # output
