@@ -83,15 +83,18 @@ while True:
 
         for i in range(99999):
             for n in occurrence:
-                out[n] -= 0 + occurrence[n] * 1.0  # repetition penalty
+                out[n] -= GEN_alpha_presence + occurrence[n] * GEN_alpha_frequency # repetition penalty
             out[0] -= 1e10  # disable END_OF_TEXT
 
-            token = pipeline.sample_logits(out, temperature=1.0, top_p=0.3)
+            token = pipeline.sample_logits(out, temperature=GEN_TEMP, top_p=GEN_TOP_P)
 
             out, model_state = model.forward([token], model_state)
             model_tokens += [token]
 
             out_tokens += [token]
+
+            for xxx in occurrence:
+                occurrence[xxx] *= GEN_penalty_decay
             occurrence[token] = 1 + (occurrence[token] if token in occurrence else 0)
 
             tmp = pipeline.decode(out_tokens[out_last:])
