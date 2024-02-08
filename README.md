@@ -6,7 +6,7 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 Our latest version is **RWKV-6**, which is easily Mamba level, and simpler ;) https://twitter.com/BlinkDL_AI/status/1732791817073229881 https://twitter.com/BlinkDL_AI/status/1713967928209752128 (Preview models: https://huggingface.co/BlinkDL/temp )
 
-**RWKV-5 World v2 1.5B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
+**RWKV-6 World v2 1.6B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
 
 **RWKV-5 World v2 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
 
