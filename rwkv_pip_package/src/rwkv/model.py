@@ -377,7 +377,7 @@ class RWKV(MyModule):
                     elif '.ln_x' in x: # need fp32 for group_norm
                         w[x] = w[x].float()
                     else:
-                        if (len(w[x].shape) == 2) and ('emb' not in x):
+                        if (len(w[x].shape) == 2) and ('emb' not in x) and ('_w1' not in x) and ('_w2' not in x):
                             if WTYPE != torch.uint8:
                                 w[x] = w[x].to(dtype=WTYPE)
                             else:
