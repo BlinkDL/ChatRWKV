@@ -54,43 +54,50 @@ class RWKV_RNN(torch.jit.ScriptModule):
     def layer_norm(self, x, w):
         return F.layer_norm(x, (self.args.n_embd,), weight=w.weight, bias=w.bias)
 
+    """
+    µr: time_mix_r
+    µk: time_mix_k
+    x_t: x
+    x_(t-1): state[5 * i + 0]
+
+    """
     @torch.jit.script_method
-    def channel_mixing(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
-        xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
-        xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
-        state[5*i+0] = x
-        r = torch.sigmoid(rw @ xr)
-        k = torch.square(torch.relu(kw @ xk)) # square relu, primer paper
-        return r * (vw @ k)
+    def channel_mixing(self, x, state, tgt_position, time_mix_k, time_mix_r, W_k, W_v, W_r):
+        r_t = W_r @ (x * time_mix_r + (1 - time_mix_r) * state[5 * tgt_position + 0])
+        k_t = W_k @ (x * time_mix_k + (1 - time_mix_k) * state[5 * tgt_position + 0])
+        k_t = torch.square(torch.relu(k_t))
+        result = torch.sigmoid(r_t) * (W_v @ k_t)
+
+        state[5 * i + 0] = x
+        return result
 
     @torch.jit.script_method
-    def time_mixing(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
-        xk = x * time_mix_k + state[5*i+1] * (1 - time_mix_k)
-        xv = x * time_mix_v + state[5*i+1] * (1 - time_mix_v)
-        xr = x * time_mix_r + state[5*i+1] * (1 - time_mix_r)
-        state[5*i+1] = x
-        r = torch.sigmoid(rw @ xr)
-        k = kw @ xk
-        v = vw @ xv
+    def time_mixing(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, W_k, W_v, W_r, W_o):
+        r_t = W_r @ (x * time_mix_r + (1 - time_mix_r) * state[5*i+1])
+        k_t = W_k @ (x * time_mix_k + (1 - time_mix_k) * state[5*i+1])
+        v_t = W_v @ (x * time_mix_v + (1 - time_mix_v) * state[5*i+1])
         
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
-        ww = time_first + k
+        ww = time_first + k_t
         qq = torch.maximum(pp, ww)
         e1 = torch.exp(pp - qq)
-        e2 = torch.exp(ww - qq)
-        a = e1 * aa + e2 * v
-        b = e1 * bb + e2
+        eukt = torch.exp(ww - qq)
+        a = e1 * aa + eukt * v_t
+        b = e1 * bb + eukt
         wkv = a / b
+        result = W_o @ (torch.sigmoid(r_t) * wkv)
+
         ww = pp + time_decay
-        qq = torch.maximum(ww, k)
+        qq = torch.maximum(ww, k_t)
         e1 = torch.exp(ww - qq)
-        e2 = torch.exp(k - qq)
-        state[5*i+2] = e1 * aa + e2 * v
+        e2 = torch.exp(k_t - qq)
+        state[5*i+1] = x
+        state[5*i+2] = e1 * aa + e2 * v_t
         state[5*i+3] = e1 * bb + e2
         state[5*i+4] = qq
-        return ow @ (r * wkv)
+        return result
 
     def forward(self, token, state):
         with torch.no_grad():
@@ -102,13 +109,27 @@ class RWKV_RNN(torch.jit.ScriptModule):
             x = self.layer_norm(x, self.w.blocks[0].ln0)
             for i in range(self.args.n_layer):
                 att = self.w.blocks[i].att
-                x = x + self.time_mixing(self.layer_norm(x, self.w.blocks[i].ln1), state, i, 
-                    att.time_mix_k, att.time_mix_v, att.time_mix_r, att.time_first, att.time_decay, 
-                    att.key.weight, att.value.weight, att.receptance.weight, att.output.weight)
+                x = x + self.time_mixing(self.layer_norm(x, self.w.blocks[i].ln1), 
+                                         state, 
+                                         i, 
+                                         att.time_mix_k, 
+                                         att.time_mix_v, 
+                                         att.time_mix_r, 
+                                         att.time_first, 
+                                         att.time_decay, 
+                                         att.key.weight, 
+                                         att.value.weight, 
+                                         att.receptance.weight, 
+                                         att.output.weight)
                 ffn = self.w.blocks[i].ffn
-                x = x + self.channel_mixing(self.layer_norm(x, self.w.blocks[i].ln2), state, i, 
-                    ffn.time_mix_k, ffn.time_mix_r, 
-                    ffn.key.weight, ffn.value.weight, ffn.receptance.weight)
+                x = x + self.channel_mixing(self.layer_norm(x, self.w.blocks[i].ln2), 
+                                            state, 
+                                            i, 
+                                            ffn.time_mix_k, 
+                                            ffn.time_mix_r, 
+                                            ffn.key.weight, 
+                                            ffn.value.weight, 
+                                            ffn.receptance.weight)
             
             x = self.w.head.weight @ self.layer_norm(x, self.w.ln_out)
             return x.float(), state
