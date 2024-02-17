@@ -14,6 +14,8 @@ Our latest version is **RWKV-6**, which is easily Mamba level, and simpler ;) ht
 
 **RWKV-LM main repo**: https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
+Chat Demo for developers: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py
+
 ## RWKV Discord: https://discord.gg/bDSBUMeFpc (7k+ members)
 
 **Twitter**: https://twitter.com/BlinkDL_AI
