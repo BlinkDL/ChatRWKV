@@ -3,6 +3,7 @@
 ########################################################################################################
 
 import os, sys, time, random
+import json
 
 print('''
 #######################################################################################################################
@@ -43,13 +44,9 @@ class RWKV_TOKENIZER():
     def __init__(self, file_name):
         self.idx2token = {}
         sorted = [] # must be already sorted
-        lines = open(file_name, "r", encoding="utf-8").readlines()
-        for l in lines:
-            idx = int(l[:l.index(' ')])
-            x = eval(l[l.index(' '):l.rindex(' ')])
-            x = x.encode("utf-8") if isinstance(x, str) else x
-            assert isinstance(x, bytes)
-            assert len(x) == int(l[l.rindex(' '):])
+        for (idx, token) in json.load(open(file_name, "r", encoding="utf-8")).items():
+            idx = int(idx)
+            x = bytes(token, "utf-8") if isinstance(token, str) else bytes(token)
             sorted += [x]
             self.idx2token[idx] = x
 
@@ -164,14 +161,9 @@ class TRIE_TOKENIZER():
     def __init__(self, file_name):
         self.idx2token = {}
         sorted = [] # must be already sorted
-        with open(file_name, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        for l in lines:
-            idx = int(l[:l.index(' ')])
-            x = eval(l[l.index(' '):l.rindex(' ')])
-            x = x.encode("utf-8") if isinstance(x, str) else x
-            assert isinstance(x, bytes)
-            assert len(x) == int(l[l.rindex(' '):])
+        for (idx, token) in json.load(open(file_name, "r", encoding="utf-8")).items():
+            idx = int(idx)
+            x = bytes(token, "utf-8") if isinstance(token, str) else bytes(token)
             sorted += [x]
             self.idx2token[idx] = x
 
@@ -217,8 +209,8 @@ class TRIE_TOKENIZER():
 # Demo
 ########################################################################################################
 
-TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230424.txt')
-TRIE_TEST = TRIE_TOKENIZER('rwkv_vocab_v20230424.txt')
+TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230424.json')
+TRIE_TEST = TRIE_TOKENIZER('rwkv_vocab_v20230424.json')
 
 src = '''起業家イーロン・マスク氏が創業した宇宙開発企業「スペースX（エックス）」の巨大新型ロケット「スターシップ」が20日朝、初めて打ち上げられたが、爆発した。
 打ち上げは米テキサス州の東海岸で行われた。無人の試験で、負傷者はいなかった。
