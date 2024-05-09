@@ -121,6 +121,7 @@ args.MODEL_NAME = '/home/rwkv/rwkv-final-v6-2.1-3b'
 args.n_layer = 32
 args.n_embd = 2560
 args.vocab_size = 65536
+args.head_size = 64
 
 context = "\nElon Musk's favorite"
 # context = "\n北京"
@@ -145,6 +146,7 @@ class RWKV_RNN(MyModule):
 
         self.n_head = w['blocks.0.att.time_faaaa'].shape[0]
         self.head_size = w['blocks.0.ln1.weight'].shape[0] // self.n_head
+        assert self.head_size == args.head_size
 
         self.w = types.SimpleNamespace() # set self.w from w
         self.w.blocks = {}
