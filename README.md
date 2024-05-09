@@ -6,9 +6,9 @@ ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which
 
 Our latest version is **RWKV-6** https://arxiv.org/abs/2404.05892 (Preview models: https://huggingface.co/BlinkDL/temp )
 
-**RWKV-6 World v2 1.6B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
+**RWKV-6 3B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
 
-**RWKV-5 World v2 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
+**RWKV-6 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
 
 ![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
 
