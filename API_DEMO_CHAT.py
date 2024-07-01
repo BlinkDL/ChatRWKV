@@ -87,13 +87,11 @@ def run_rnn(ctx):
 
     return out
 
-
-init_ctx = "User: hi" + "\n\n"
-init_ctx += "Assistant: Hi. I am your assistant and I will provide expert full response in full details. Please feel free to ask any question and I will always answer it." + "\n\n"
-
-run_rnn(init_ctx)
-
-print(init_ctx, end="")
+if STATE_NAME == None: # use initial prompt if we are not loading a state
+    init_ctx = "User: hi" + "\n\n"
+    init_ctx += "Assistant: Hi. I am your assistant and I will provide expert full response in full details. Please feel free to ask any question and I will always answer it." + "\n\n"
+    run_rnn(init_ctx)
+    print(init_ctx, end="")
 
 while True:
     msg = prompt("User: ")
