@@ -166,8 +166,9 @@ def sample_logits(logits, temperature:float=1.0, top_p:float=1.0, top_k:int=0):
 
         if top_p > 0:
             idx = torch.where(probs == cutoff)[0]
-            probs[idx] = cutoff + (top_p - torch.sum(probs).item()) / len(idx)
-            # assert abs(torch.sum(probs).item() - top_p) < 1e-6
+            if len(idx) > 0:
+                probs[idx] = cutoff + (top_p - torch.sum(probs).item()) / len(idx)
+                # assert abs(torch.sum(probs).item() - top_p) < 1e-6
     
     if temperature != 1.0:
         probs = probs ** (1.0 / temperature)
@@ -287,6 +288,7 @@ for TRIAL in range(NUM_TRIALS):
 
         out, state = model.forward(token, state)
         
+        torch.cuda.synchronize()
         t1 = time.perf_counter()
         min_time = min(min_time, t1 - t0)
         min_time_all = min(min_time_all, t1 - t00)
