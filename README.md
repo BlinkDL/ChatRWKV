@@ -2,6 +2,8 @@
 
 RWKV homepage: https://www.rwkv.com
 
+## Please check https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py first
+
 ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :)
 
 Our latest version is **RWKV-6** https://arxiv.org/abs/2404.05892 (Preview models: https://huggingface.co/BlinkDL/temp )
@@ -38,21 +40,15 @@ Install VS2022 build tools (https://aka.ms/vs/17/release/vs_BuildTools.exe selec
 ```
 **RWKV pip package**: https://pypi.org/project/rwkv/ **(please always check for latest version and upgrade)**
 
-**nanoRWKV**: https://github.com/BlinkDL/nanoRWKV (does not require custom CUDA kernel to train, works for any GPU/CPU)
+https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel)
 
-https://github.com/cgisky1980/ai00_rwkv_server Fastest GPU inference API with vulkan (good for nvidia/amd/intel), supports rwkv5
+https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server
 
-https://github.com/cryscan/web-rwkv backend for ai00_rwkv_server, supports rwkv5
+https://github.com/saharNooby/rwkv.cpp Fast CPU/cuBLAS/CLBlast inference: int4/int8/fp16/fp32
 
-https://github.com/saharNooby/rwkv.cpp Fast CPU/cuBLAS/CLBlast inference: int4/int8/fp16/fp32, supports rwkv5
-
-https://github.com/daquexian/faster-rwkv supports rwkv5
-
-https://github.com/mlc-ai/mlc-llm/pull/1275 supports rwkv5
+https://github.com/JL-er/RWKV-PEFT lora/pissa/Qlora/Qpissa/state tuning
 
 https://github.com/RWKV/RWKV-infctx-trainer Infctx trainer
-
-https://github.com/Blealtan/RWKV-LM-LoRA LoRA finetuning
 
 **World demo script:** https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_WORLD.py
 
