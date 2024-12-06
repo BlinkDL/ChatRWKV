@@ -1,21 +1,21 @@
 The RWKV Language Model
 
-https://github.com/BlinkDL/ChatRWKV
-
 https://github.com/BlinkDL/RWKV-LM
 
+https://github.com/BlinkDL/ChatRWKV
+
 ```python
-# set these before import RWKV
-os.environ['RWKV_JIT_ON'] = '1'
+# !!! set these before import RWKV !!!
+os.environ['RWKV_JIT_ON'] = '1' # '1' for better speed
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
 
 ########################################################################################################
 #
 # Use '/' in model path, instead of '\'. Use ctx4096 models if you need long ctx.
 #
-# fp16 = good for GPU (!!! DOES NOT support CPU !!!)
+# fp16 = good for GPU
 # fp32 = good for CPU
-# bf16 = worse accuracy, supports CPU
+# bf16 = supports CPU
 # xxxi8 (example: fp16i8, fp32i8) = xxx with int8 quantization to save 50% VRAM/RAM, slower, slightly less accuracy
 #
 # We consider [ln_out+head] to be an extra layer, so L12-D768 (169M) has "13" layers, L24-D2048 (1.5B) has "25" layers, etc.
@@ -51,9 +51,10 @@ from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 
 # download models: https://huggingface.co/BlinkDL
-model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
-pipeline = PIPELINE(model, "20B_tokenizer.json") # 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
-# use pipeline = PIPELINE(model, "rwkv_vocab_v20230424") for rwkv "world" models
+model = RWKV(model='RWKV-x060-World-1B6-v2.1-20240328-ctx4096', strategy='cpu fp32')
+
+pipeline = PIPELINE(model, "rwkv_vocab_v20230424") # for "world" models
+# pipeline = PIPELINE(model, "20B_tokenizer.json") # for "pile" models, 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(ctx, end='')
@@ -68,12 +69,14 @@ args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100, # top_k = 0 th
                      alpha_frequency = 0.25,
                      alpha_presence = 0.25,
                      alpha_decay = 0.996, # gradually decay the penalty
-                     token_ban = [0], # ban the generation of some tokens
+                     token_ban = [], # ban the generation of some tokens
                      token_stop = [], # stop generation whenever you see any token here
                      chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
 
 pipeline.generate(ctx, token_count=200, args=args, callback=my_print)
 print('\n')
+
+# !!! model.forward(tokens, state) will modify state in-place !!!
 
 out, state = model.forward([187, 510, 1563, 310, 247], None)
 print(out.detach().cpu().numpy())                   # get logits
