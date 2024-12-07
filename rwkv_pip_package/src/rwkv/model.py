@@ -173,7 +173,7 @@ if os.environ.get('RWKV_DML_ON') == '1':
 
 if os.environ.get('RWKV_V7_ON') == '1':
 
-    print('\n### RWKV-7 "Goose" enabled (currently only cuda fp16/bf16/fp32) ###\n')
+    print(f'\n### RWKV-7 "Goose" enabled ###\n')
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.allow_tf32 = True
@@ -188,56 +188,61 @@ if os.environ.get('RWKV_V7_ON') == '1':
     from typing import List
 
     DTYPE = None
-
-    from torch.utils.cpp_extension import load
+    DEVICE = None
     HEAD_SIZE = 64
 
-    load(name="wkv7s", sources=[f"{current_path}/cuda/wkv7s_op.cpp", f"{current_path}/cuda/wkv7s.cu"], is_python_module=False,
-                        verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}"])
-    class WKV_7(torch.autograd.Function):
-        @staticmethod
-        def forward(ctx, state, r, w, k, v, a, b):
-            with torch.no_grad():
-                T, C = r.size()
-                H = C // HEAD_SIZE
-                N = HEAD_SIZE
-                assert HEAD_SIZE == C // H
-                assert all(x.dtype == DTYPE for x in [r,w,k,v,a,b])
-                assert all(x.is_contiguous() for x in [r,w,k,v,a,b])
-                y = torch.empty((T, C), device=k.device, dtype=r.dtype, requires_grad=False, memory_format=torch.contiguous_format)
+    if os.environ.get('RWKV_CUDA_ON') == '1':
+        from torch.utils.cpp_extension import load
+        load(name="wkv7s", sources=[f"{current_path}/cuda/rwkv7_op.cpp", f"{current_path}/cuda/rwkv7.cu"], is_python_module=False,
+                            verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}"])
+        class WKV_7(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, state, r, w, k, v, a, b):
+                with torch.no_grad():
+                    T, C = r.size()
+                    H = C // HEAD_SIZE
+                    N = HEAD_SIZE
+                    assert HEAD_SIZE == C // H
+                    assert all(x.dtype == DTYPE for x in [r,w,k,v,a,b])
+                    assert all(x.is_contiguous() for x in [r,w,k,v,a,b])
+                    y = torch.empty((T, C), device=DEVICE, dtype=r.dtype, requires_grad=False, memory_format=torch.contiguous_format)
 
-                if DTYPE == torch.float16:
-                    torch.ops.wkv7s.forward_fp16(1, T, C, H, state, r, w, k, v, a, b, y)
-                elif DTYPE == torch.bfloat16:
-                    torch.ops.wkv7s.forward_bf16(1, T, C, H, state, r, w, k, v, a, b, y)
-                elif DTYPE == torch.float32:
-                    torch.ops.wkv7s.forward_fp32(1, T, C, H, state, r, w, k, v, a, b, y)
+                    if DTYPE == torch.float16:
+                        torch.ops.wkv7s.forward_fp16(1, T, C, H, state, r, w, k, v, a, b, y)
+                    elif DTYPE == torch.bfloat16:
+                        torch.ops.wkv7s.forward_bf16(1, T, C, H, state, r, w, k, v, a, b, y)
+                    elif DTYPE == torch.float32:
+                        torch.ops.wkv7s.forward_fp32(1, T, C, H, state, r, w, k, v, a, b, y)
 
-                return y
-    def RWKV7_OP(state, r, w, k, v, a, b):
-        return WKV_7.apply(state, r, w, k, v, a, b)
+                    return y
+        def RWKV7_OP(state, r, w, k, v, a, b):
+            return WKV_7.apply(state, r, w, k, v, a, b)
     
     ########################################################################################################
 
     class RWKV_x070(MyModule):
         def __init__(self, model, strategy):
-            global DTYPE
+            global DTYPE, DEVICE
             super().__init__()
             self.eval()
             args = types.SimpleNamespace()
             self.args = args
             args.MODEL_NAME = model
 
-            if strategy == 'cuda fp16':
+            print(f'Loading {model} ({strategy})\n')
+
+            ss = strategy.split(' ')
+            DEVICE = ss[0]
+            if ss[1] == 'fp16':
                 DTYPE = torch.half
-            elif strategy == 'cuda fp32':
+            elif ss[1] == 'fp32':
                 DTYPE = torch.float32
-            elif strategy == 'cuda bf16':
+            elif ss[1] == 'bf16':
                 DTYPE = torch.bfloat16
             else:
-                assert False, "currently rwkv7 strategy must be: cuda fp16 / cuda fp32 / cuda bf16"
+                assert False, "currently rwkv7 strategy must be: cuda/cpu fp16/fp32/bf16"
             
-            self.z = torch.load(args.MODEL_NAME + '.pth', map_location='cuda')
+            self.z = torch.load(args.MODEL_NAME + '.pth', map_location=DEVICE)
             z = self.z
 
             self.n_head, self.head_size = z['blocks.0.att.r_k'].shape
@@ -266,9 +271,9 @@ if os.environ.get('RWKV_V7_ON') == '1':
             if state == None:
                 state = [None for _ in range(self.args.n_layer * 3)]
                 for i in range(self.args.n_layer): # state: 0=att_x_prev 1=att_kv 2=ffn_x_prev
-                    state[i*3+0] = torch.zeros(self.args.n_embd, dtype=DTYPE, requires_grad=False, device="cuda")
-                    state[i*3+1] = torch.zeros((self.args.n_embd // self.args.head_size, self.args.head_size, self.args.head_size), dtype=torch.float, requires_grad=False, device="cuda")
-                    state[i*3+2] = torch.zeros(self.args.n_embd, dtype=DTYPE, requires_grad=False, device="cuda")
+                    state[i*3+0] = torch.zeros(self.args.n_embd, dtype=DTYPE, requires_grad=False, device=DEVICE)
+                    state[i*3+1] = torch.zeros((self.args.n_embd // self.args.head_size, self.args.head_size, self.args.head_size), dtype=torch.float, requires_grad=False, device=DEVICE)
+                    state[i*3+2] = torch.zeros(self.args.n_embd, dtype=DTYPE, requires_grad=False, device=DEVICE)
 
             if type(idx) is list:
                 if len(idx) > 1:
@@ -372,39 +377,61 @@ if os.environ.get('RWKV_V7_ON') == '1':
         xx = xx + ((r * k * r_k).view(H,N).sum(dim=-1, keepdim=True) * v.view(H,N)).view(H*N)
         return (xx * g) @ O_, x, state, v_first
 
-    @MyStatic
-    def RWKV_x070_TMix_seq(layer_id: int, H:int, N:int, x, x_prev, v_first, state, x_r, x_w, x_k, x_v, x_a, x_g, w0, w1, w2, a0, a1, a2, v0, v1, v2, g1, g2, k_k, k_a, r_k, R_, K_, V_, O_, ln_w, ln_b):
-        T = x.shape[0]
-        xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
-        xr, xw, xk, xv, xa, xg = x+xx*x_r, x+xx*x_w, x+xx*x_k, x+xx*x_v, x+xx*x_a, x+xx*x_g
+    if os.environ.get('RWKV_CUDA_ON') == '1':
+        @MyStatic
+        def RWKV_x070_TMix_seq(layer_id: int, H:int, N:int, x, x_prev, v_first, state, x_r, x_w, x_k, x_v, x_a, x_g, w0, w1, w2, a0, a1, a2, v0, v1, v2, g1, g2, k_k, k_a, r_k, R_, K_, V_, O_, ln_w, ln_b):
+            T = x.shape[0]
+            xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
+            xr, xw, xk, xv, xa, xg = x+xx*x_r, x+xx*x_w, x+xx*x_k, x+xx*x_v, x+xx*x_a, x+xx*x_g
 
-        r = xr @ R_
-        w = torch.tanh(xw @ w1) @ w2
-        k = xk @ K_
-        v = xv @ V_
-        a = torch.sigmoid(a0 + (xa @ a1) @ a2)
-        g = torch.sigmoid(xg @ g1) @ g2
+            r = xr @ R_
+            w = torch.tanh(xw @ w1) @ w2
+            k = xk @ K_
+            v = xv @ V_
+            a = torch.sigmoid(a0 + (xa @ a1) @ a2)
+            g = torch.sigmoid(xg @ g1) @ g2
 
-        kk = torch.nn.functional.normalize((k * k_k).view(T,H,N), dim=-1, p=2.0).view(T,H*N)
-        k = k * (1 + (a-1) * k_a)
-        if layer_id == 0: v_first = v
-        else: v = v + (v_first - v) * torch.sigmoid(v0 + (xv @ v1) @ v2)
+            kk = torch.nn.functional.normalize((k * k_k).view(T,H,N), dim=-1, p=2.0).view(T,H*N)
+            k = k * (1 + (a-1) * k_a)
+            if layer_id == 0: v_first = v
+            else: v = v + (v_first - v) * torch.sigmoid(v0 + (xv @ v1) @ v2)
 
-        ######## cuda-free method 
-        # w = torch.exp(-0.606531 * torch.sigmoid((w0 + w).float())) # 0.606531 = exp(-0.5)
-        # for t in range(T):
-        #     r_, w_, k_, v_, kk_, a_ = r[t], w[t], k[t], v[t], kk[t], a[t]
-        #     vk = v_.view(H,N,1) @ k_.view(H,1,N)
-        #     ab = (-kk_).view(H,N,1) @ (kk_*a_).view(H,1,N)
-        #     state = state * w_.view(H,1,N) + state @ ab.float() + vk.float()
-        #     xx[t] = (state.to(dtype=x.dtype) @ r_.view(H,N,1)).view(H*N)
+            w = -torch.nn.functional.softplus(-(w0 + w)) - 0.5
+            xx = RWKV7_OP(state, r, w, k, v, -kk, kk*a)
 
-        w = -torch.nn.functional.softplus(-(w0 + w)) - 0.5
-        xx = RWKV7_OP(state, r, w, k, v, -kk, kk*a)
+            xx = torch.nn.functional.group_norm(xx.view(T,H*N), num_groups=H, weight=ln_w, bias=ln_b, eps = 64e-5).view(T,H*N)
+            xx = xx + ((r * k * r_k).view(T,H,N).sum(dim=-1, keepdim=True) * v.view(T,H,N)).view(T,H*N)
+            return (xx * g) @ O_, x[-1,:], state, v_first
+    else:
+        @MyStatic
+        def RWKV_x070_TMix_seq(layer_id: int, H:int, N:int, x, x_prev, v_first, state, x_r, x_w, x_k, x_v, x_a, x_g, w0, w1, w2, a0, a1, a2, v0, v1, v2, g1, g2, k_k, k_a, r_k, R_, K_, V_, O_, ln_w, ln_b):
+            T = x.shape[0]
+            xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
+            xr, xw, xk, xv, xa, xg = x+xx*x_r, x+xx*x_w, x+xx*x_k, x+xx*x_v, x+xx*x_a, x+xx*x_g
 
-        xx = torch.nn.functional.group_norm(xx.view(T,H*N), num_groups=H, weight=ln_w, bias=ln_b, eps = 64e-5).view(T,H*N)
-        xx = xx + ((r * k * r_k).view(T,H,N).sum(dim=-1, keepdim=True) * v.view(T,H,N)).view(T,H*N)
-        return (xx * g) @ O_, x[-1,:], state, v_first
+            r = xr @ R_
+            w = torch.tanh(xw @ w1) @ w2
+            k = xk @ K_
+            v = xv @ V_
+            a = torch.sigmoid(a0 + (xa @ a1) @ a2)
+            g = torch.sigmoid(xg @ g1) @ g2
+
+            kk = torch.nn.functional.normalize((k * k_k).view(T,H,N), dim=-1, p=2.0).view(T,H*N)
+            k = k * (1 + (a-1) * k_a)
+            if layer_id == 0: v_first = v
+            else: v = v + (v_first - v) * torch.sigmoid(v0 + (xv @ v1) @ v2)
+
+            w = torch.exp(-0.606531 * torch.sigmoid((w0 + w).float())) # 0.606531 = exp(-0.5)
+            for t in range(T):
+                r_, w_, k_, v_, kk_, a_ = r[t], w[t], k[t], v[t], kk[t], a[t]
+                vk = v_.view(H,N,1) @ k_.view(H,1,N)
+                ab = (-kk_).view(H,N,1) @ (kk_*a_).view(H,1,N)
+                state = state * w_.view(H,1,N) + state @ ab.float() + vk.float()
+                xx[t] = (state.to(dtype=x.dtype) @ r_.view(H,N,1)).view(H*N)
+
+            xx = torch.nn.functional.group_norm(xx.view(T,H*N), num_groups=H, weight=ln_w, bias=ln_b, eps = 64e-5).view(T,H*N)
+            xx = xx + ((r * k * r_k).view(T,H,N).sum(dim=-1, keepdim=True) * v.view(T,H,N)).view(T,H*N)
+            return (xx * g) @ O_, x[-1,:], state, v_first
 
     ########################################################################################################
 
