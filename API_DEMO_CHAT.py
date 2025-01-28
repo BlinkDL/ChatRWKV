@@ -12,6 +12,7 @@ import torch
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
+os.environ["RWKV_V7_ON"] = "1" # enable this for rwkv-7 models
 os.environ["RWKV_JIT_ON"] = "1"
 os.environ["RWKV_CUDA_ON"] = "0"  # !!! '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries !!!
 
@@ -24,15 +25,15 @@ args = types.SimpleNamespace()
 
 args.strategy = "cuda fp16"  # use CUDA, fp16
 
-args.MODEL_NAME = "E://RWKV-Runner//models//rwkv-final-v6-2.1-1b6"
+args.MODEL_NAME = "E://RWKV-Runner//models//RWKV-x070-World-1.5B-v3-20250127-ctx4096"
 
 
 ########################################################################################################
-# STATE_NAME = None # use vanilla zero initial state?
+STATE_NAME = None # use vanilla zero initial state?
 
 # use custom state? much better chat results (download from https://huggingface.co/BlinkDL/temp-latest-training-models/tree/main)
 # note: this is English Single-round QA state (will forget what you previously say)
-STATE_NAME = "E://RWKV-Runner//models//rwkv-x060-eng_single_round_qa-1B6-20240516-ctx2048"
+# STATE_NAME = "E://RWKV-Runner//models//rwkv-x060-eng_single_round_qa-1B6-20240516-ctx2048"
 ########################################################################################################
 
 GEN_TEMP = 1.0

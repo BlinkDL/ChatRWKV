@@ -3,20 +3,19 @@
 ########################################################################################################
 
 print(
-    "\nHere are some demos for RWKV-4-World models (https://huggingface.co/BlinkDL/rwkv-4-world)\n"
+    "\nHere are some demos for RWKV World models (https://huggingface.co/BlinkDL)\n"
 )
 
-import os, re
+import os, re, sys
 
+os.environ["RWKV_V7_ON"] = "1" # enable this for rwkv-7 models
 os.environ["RWKV_JIT_ON"] = "1"  #### set these before import RWKV
-os.environ[
-    "RWKV_CUDA_ON"
-] = "0"  #### set to '1' to compile CUDA kernel (10x faster) - requires c++ compiler & cuda libraries
+os.environ["RWKV_CUDA_ON"] = "0"  #### set to '1' to compile CUDA kernel (10x faster) - requires c++ compiler & cuda libraries
 
 from rwkv.model import RWKV  #### pip install rwkv --upgrade
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 
-MODEL_FILE = "/fsx/BlinkDL/HF-MODEL/rwkv-4-world/RWKV-4-World-7B-v1-20230626-ctx4096"
+MODEL_FILE = "E://RWKV-Runner//models//RWKV-x070-World-1.5B-v3-20250127-ctx4096"
 
 model = RWKV(model=MODEL_FILE, strategy="cuda fp16")
 pipeline = PIPELINE(model, "rwkv_vocab_v20230424")  #### vocab for rwkv-4-world models

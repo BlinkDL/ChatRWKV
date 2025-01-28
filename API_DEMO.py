@@ -32,11 +32,13 @@ np.set_printoptions(precision=4, suppress=True, linewidth=200)
 #
 ########################################################################################################
 # set these before import RWKV
+os.environ["RWKV_V7_ON"] = "1" # enable this for rwkv-7 models
 os.environ['RWKV_JIT_ON'] = '1'
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
 
 from rwkv.model import RWKV # pip install rwkv
-model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
+model = RWKV(model="E://RWKV-Runner//models//RWKV-x070-World-1.5B-v3-20250127-ctx4096", strategy='cuda fp16')
+# model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16i8')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cuda fp16i8 *6 -> cuda fp16 *0+ -> cpu fp32 *1')
 # model = RWKV(model='/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-169m/RWKV-4-Pile-169M-20220807-8023', strategy='cpu fp32')
@@ -62,7 +64,7 @@ print(out.detach().cpu().numpy())                   # same result as above
 # print('\n')
 # exit(0)
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
-pipeline = PIPELINE(model, "20B_tokenizer.json")
+pipeline = PIPELINE(model, "rwkv_vocab_v20230424")
 
 ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(ctx, end='')
