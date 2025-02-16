@@ -217,8 +217,8 @@ class TRIE_TOKENIZER():
 # Demo
 ########################################################################################################
 
-TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20230424.txt')
-TRIE_TEST = TRIE_TOKENIZER('rwkv_vocab_v20230424.txt')
+TOKENIZER = RWKV_TOKENIZER('rwkv_vocab_v20250216.txt')
+TRIE_TEST = TRIE_TOKENIZER('rwkv_vocab_v20250216.txt')
 
 src = '''起業家イーロン・マスク氏が創業した宇宙開発企業「スペースX（エックス）」の巨大新型ロケット「スターシップ」が20日朝、初めて打ち上げられたが、爆発した。
 打ち上げは米テキサス州の東海岸で行われた。無人の試験で、負傷者はいなかった。
