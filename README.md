@@ -1,18 +1,16 @@
 # ChatRWKV (pronounced as "RwaKuv" (rʌkuv in IPA), from 4 major params: R W K V)
 
-RWKV homepage: https://www.rwkv.com
+## RWKV homepage: https://www.rwkv.com
 
-## Please check https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py first
+RWKV-7 code: https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v7
 
-ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM. Training sponsored by Stability EleutherAI :)
+ChatRWKV is like ChatGPT but powered by my RWKV (100% RNN) language model, which is the only RNN (as of now) that can match transformers in quality and scaling, while being faster and saves VRAM.
 
-Our latest version is **RWKV-6** https://arxiv.org/abs/2404.05892 (Preview models: https://huggingface.co/BlinkDL/temp )
+Our latest version is **RWKV-7** https://arxiv.org/abs/2503.14456 (Preview models: https://huggingface.co/BlinkDL/temp )
 
-**RWKV-6 3B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
+Gradio Demo 1: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-1
 
-**RWKV-6 7B** Demo: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
-
-![RWKV-v5-benchmark-1](RWKV-v5-benchmark-1.png)
+Gradio Demo 2: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
 
 **RWKV-LM main repo**: https://github.com/BlinkDL/RWKV-LM (explanation, fine-tuning, training, etc.)
 
