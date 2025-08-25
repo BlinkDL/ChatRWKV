@@ -1,15 +1,65 @@
 The RWKV Language Model
 
-https://github.com/BlinkDL/RWKV-LM
+https://rwkv.com
 
-https://github.com/BlinkDL/ChatRWKV
 
 ```python
-# !!! set these before import RWKV !!!
+#
+# !!! set these os.environ[] before import RWKV !!!
+#
+import os
+os.environ["RWKV_V7_ON"] = '1' # ==> !!! enable RWKV-7 mode !!!
 os.environ['RWKV_JIT_ON'] = '1' # '1' for better speed
-os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requires c++ compiler & cuda libraries
+os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster prefilling), requires c++ compiler & cuda libraries
 
+from rwkv.model import RWKV
+from rwkv.utils import PIPELINE, PIPELINE_ARGS
+#
+# download models: https://huggingface.co/BlinkDL
+# try strategy='cuda fp16' or 'cpu fp32'
+#
+model = RWKV(model='/mnt/e/RWKV-Runner/models/rwkv7-g1a-0.1b-20250728-ctx4096', strategy='cuda fp16') # Use '/' in model path, instead of '\'
+
+pipeline = PIPELINE(model, "rwkv_vocab_v20230424") # for "g" and "world" models
+# pipeline = PIPELINE(model, "20B_tokenizer.json") # for "pile" models, 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
+
+ctx = "User: simulate SpaceX mars landing using python\n\nAssistant: <think"
+print(ctx, end='')
+
+# For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
+# https://platform.openai.com/docs/api-reference/parameter-details
+
+args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.5, top_k = 100, # top_k = 0 then ignore
+                     alpha_frequency = 0.0,
+                     alpha_presence = 0.0,
+                     alpha_decay = 0.997, # gradually decay the penalty
+                     token_ban = [], # ban the generation of some tokens
+                     token_stop = [], # stop generation whenever you see any token here
+                     chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
+
+def my_print(s):
+    print(s, end='', flush=True)
+
+pipeline.generate(ctx, token_count=4000, args=args, callback=my_print)
+print('\n')
+
+# !!! model.forward(tokens, state) will modify state in-place !!!
+
+out, state = model.forward([187, 510, 1563, 310, 247], None)
+print(out.detach().cpu().numpy())                   # get logits
+out, state = model.forward([187, 510], None)
+out, state = model.forward([1563], state)           # RNN has state (use deepcopy to clone states)
+out, state = model.forward([310, 247], state)
+print(out.detach().cpu().numpy())                   # same result as above
+print('\n')
+```
+
+Old readme:
+
+```python
 ########################################################################################################
+#
+# For RWKV-4/5/6 models:
 #
 # Use '/' in model path, instead of '\'. Use ctx4096 models if you need long ctx.
 #
@@ -46,43 +96,4 @@ os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster), requ
 # 'cuda fp16i8 *0+ -> cpu fp32 *1' = stream all layers cuda fp16i8, last 1 layer [ln_out+head] cpu fp32
 #
 # ########################################################################################################
-
-from rwkv.model import RWKV
-from rwkv.utils import PIPELINE, PIPELINE_ARGS
-
-# download models: https://huggingface.co/BlinkDL
-model = RWKV(model='RWKV-x060-World-1B6-v2.1-20240328-ctx4096', strategy='cpu fp32')
-
-pipeline = PIPELINE(model, "rwkv_vocab_v20230424") # for "world" models
-# pipeline = PIPELINE(model, "20B_tokenizer.json") # for "pile" models, 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
-
-ctx = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
-print(ctx, end='')
-
-def my_print(s):
-    print(s, end='', flush=True)
-
-# For alpha_frequency and alpha_presence, see "Frequency and presence penalties":
-# https://platform.openai.com/docs/api-reference/parameter-details
-
-args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.7, top_k = 100, # top_k = 0 then ignore
-                     alpha_frequency = 0.25,
-                     alpha_presence = 0.25,
-                     alpha_decay = 0.996, # gradually decay the penalty
-                     token_ban = [], # ban the generation of some tokens
-                     token_stop = [], # stop generation whenever you see any token here
-                     chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
-
-pipeline.generate(ctx, token_count=200, args=args, callback=my_print)
-print('\n')
-
-# !!! model.forward(tokens, state) will modify state in-place !!!
-
-out, state = model.forward([187, 510, 1563, 310, 247], None)
-print(out.detach().cpu().numpy())                   # get logits
-out, state = model.forward([187, 510], None)
-out, state = model.forward([1563], state)           # RNN has state (use deepcopy to clone states)
-out, state = model.forward([310, 247], state)
-print(out.detach().cpu().numpy())                   # same result as above
-print('\n')
 ```
