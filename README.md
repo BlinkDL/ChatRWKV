@@ -16,6 +16,8 @@ Gradio Demo 2: https://huggingface.co/spaces/BlinkDL/RWKV-Gradio-2
 
 Chat Demo for developers: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO_CHAT.py
 
+**Efficient inference project**: https://github.com/BlinkDL/Albatross
+
 ## RWKV Discord: https://discord.gg/bDSBUMeFpc (7k+ members)
 
 **Twitter**: https://twitter.com/BlinkDL_AI
