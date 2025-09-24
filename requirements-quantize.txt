@@ -1,0 +1,12 @@
+rwkv==0.7.3
+-f https://download.pytorch.org/whl/cu117/torch_stable.html
+torch==1.13.1+cu117
+transformers
+datasets
+ninja
+tokenizers>=0.13.2
+prompt_toolkit
+# Debug
+pdbpp
+line_profiler
+torchvision==0.14.1+cu117
