@@ -18,6 +18,8 @@ Chat Demo for developers: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO
 
 **Efficient inference project**: https://github.com/BlinkDL/Albatross
 
+**RWKV APP**: https://github.com/RWKV-APP/RWKV_APP (local inference for Android / iOS)
+
 ## RWKV Discord: https://discord.gg/bDSBUMeFpc (7k+ members)
 
 **Twitter**: https://twitter.com/BlinkDL_AI
