@@ -40,7 +40,7 @@ args = PIPELINE_ARGS(temperature = 1.0, top_p = 0.5, top_k = 100, # top_k = 0 th
 def my_print(s):
     print(s, end='', flush=True)
 
-pipeline.generate(ctx, token_count=4000, args=args, callback=my_print)
+pipeline.generate(ctx, token_count=500, args=args, callback=my_print)
 print('\n')
 
 # !!! model.forward(tokens, state) will modify state in-place !!!
@@ -52,6 +52,111 @@ out, state = model.forward([1563], state)           # RNN has state (use deepcop
 out, state = model.forward([310, 247], state)
 print(out.detach().cpu().numpy())                   # same result as above
 print('\n')
+```
+
+Faster decoding (CUDAGraph, requires rwkv pip pkg v0.8.31+):
+```python
+import os, time
+import numpy as np
+import torch
+os.environ["RWKV_V7_ON"] = '1'
+os.environ['RWKV_JIT_ON'] = '1'
+os.environ["RWKV_CUDA_ON"] = '1' 
+from rwkv.model import RWKV
+from rwkv.utils import PIPELINE
+model = RWKV(model='/mnt/e/RWKV-Runner/models/rwkv7-g1a-0.1b-20250728-ctx4096', strategy='cuda fp16')
+pipeline = PIPELINE(model, "rwkv_vocab_v20230424")
+
+LENGTH_PER_TRIAL = 256
+TEMPERATURE = 1.0
+TOP_P = 0.0
+prompt = "User: simulate SpaceX mars landing using python\n\nAssistant: <think"
+
+###############################################################################
+
+print('='*80 + '\nSlow inference\n' + '='*80)
+print(prompt, end="")
+
+all_tokens = []
+out_last = 0
+out, state = model.forward(pipeline.encode(prompt), None)
+
+times = []
+all_times = []
+t000 = time.perf_counter()
+for i in range(LENGTH_PER_TRIAL):
+    t00 = time.perf_counter()
+    token = pipeline.sample_logits(out, temperature=TEMPERATURE, top_p=TOP_P)
+    all_tokens += [token]
+
+    tmp = pipeline.decode(all_tokens[out_last:])
+    if '\ufffd' not in tmp:
+        print(tmp, end="", flush=True) # only print when we have a valid utf-8 string
+        out_last = i+1    
+
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+
+    out, state = model.forward(token, state)
+
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    times.append(t1 - t0)
+    all_times.append(t1 - t00)
+times = np.percentile(times, 50)
+all_times = np.percentile(all_times, 50)
+print(f'\n\nToken/s = {round(1/times,2)} (forward), {round(1/all_times,2)} (full)')
+
+###############################################################################
+
+print('='*80 + '\nFast inference (CUDAGraph, requires rwkv pip pkg v0.8.31+)\n' + '='*80)
+print(prompt, end="")
+
+all_tokens = []
+out_last = 0
+state = model.generate_zero_state()
+
+static_input = torch.empty((model.n_embd), device="cuda", dtype=torch.half)
+static_state_in = [torch.empty_like(x, device="cuda") for x in state]
+static_state_out = [torch.empty_like(x, device="cuda") for x in state]
+static_output = torch.empty((model.args.vocab_size), device="cuda", dtype=torch.half)
+g = torch.cuda.CUDAGraph()
+with torch.cuda.graph(g):
+    static_output, static_state_out = model.forward_one_alt(static_input, static_state_in)
+
+out, state = model.forward(pipeline.encode(prompt), state)
+for i in range(len(state)):
+    static_state_in[i].copy_(state[i])
+static_output.copy_(out)
+
+times = []
+all_times = []
+t000 = time.perf_counter()
+for i in range(LENGTH_PER_TRIAL):
+    t00 = time.perf_counter()
+    token = pipeline.sample_logits(static_output, temperature=TEMPERATURE, top_p=TOP_P)
+    all_tokens += [token]
+
+    tmp = pipeline.decode(all_tokens[out_last:])
+    if '\ufffd' not in tmp:
+        print(tmp, end="", flush=True) # only print when we have a valid utf-8 string
+        out_last = i+1
+
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+
+    static_input.copy_(model.z['emb.weight'][token])
+    g.replay()
+    for n in range(len(state)):
+        static_state_in[n].copy_(static_state_out[n])
+    
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    times.append(t1 - t0)
+    all_times.append(t1 - t00)
+times = np.percentile(times, 50)
+all_times = np.percentile(all_times, 50)
+print(f'\n\nToken/s = {round(1/times,2)} (forward), {round(1/all_times,2)} (full) (note: very inefficient sample_logits)')
 ```
 
 Old readme:
