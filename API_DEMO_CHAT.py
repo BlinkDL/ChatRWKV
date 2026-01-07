@@ -25,14 +25,15 @@ args = types.SimpleNamespace()
 
 args.strategy = "cuda fp16"  # use CUDA, fp16
 
-args.MODEL_NAME = "E://RWKV-Runner//models//RWKV-x070-World-1.5B-v3-20250127-ctx4096"
+args.MODEL_NAME = "E://RWKV-Runner//models//rwkv7-g1b-1.5b-20251202-ctx8192"
 
 
 ########################################################################################################
 STATE_NAME = None # use vanilla zero initial state?
 
-# use custom state? much better chat results (download from https://huggingface.co/BlinkDL/temp-latest-training-models/tree/main)
+# use custom state? (download from https://huggingface.co/BlinkDL/temp-latest-training-models/tree/main)
 # note: this is English Single-round QA state (will forget what you previously say)
+# note: requires the the same model it trained on
 # STATE_NAME = "E://RWKV-Runner//models//rwkv-x060-eng_single_round_qa-1B6-20240516-ctx2048"
 ########################################################################################################
 
