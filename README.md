@@ -28,6 +28,8 @@ Chat Demo for developers: https://github.com/BlinkDL/ChatRWKV/blob/main/API_DEMO
 
 **Raw cutting-edge RWKV weights:** https://huggingface.co/BlinkDL
 
+**GGUF:** https://huggingface.co/collections/shoumenchougou/rwkv7-gxx-gguf
+
 **HF-compatible RWKV weights:** https://huggingface.co/RWKV
 
 Use v2/convert_model.py to convert a model for a strategy, for faster loading & saves CPU RAM.
