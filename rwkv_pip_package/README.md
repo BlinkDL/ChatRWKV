@@ -8,7 +8,8 @@ https://rwkv.com
 # !!! set these os.environ[] before import RWKV !!!
 #
 import os
-os.environ["RWKV_V7_ON"] = '1' # ==> !!! enable RWKV-7 mode !!!
+os.environ["RWKV_V7_ON"] = '1' # !!! enable RWKV-7 !!!
+# os.environ["RWKV_DE_VERSION"] = '1' # enable DeepEmbed if applicable
 os.environ['RWKV_JIT_ON'] = '1' # '1' for better speed
 os.environ["RWKV_CUDA_ON"] = '0' # '1' to compile CUDA kernel (10x faster prefilling), requires c++ compiler & cuda libraries
 
@@ -60,6 +61,7 @@ import os, time
 import numpy as np
 import torch
 os.environ["RWKV_V7_ON"] = '1'
+# os.environ["RWKV_DE_VERSION"] = '1' # enable DeepEmbed if applicable
 os.environ['RWKV_JIT_ON'] = '1'
 os.environ["RWKV_CUDA_ON"] = '1' 
 from rwkv.model import RWKV

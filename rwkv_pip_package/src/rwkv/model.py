@@ -270,6 +270,12 @@ if os.environ.get('RWKV_V7_ON') == '1':
             self.n_layer = args.n_layer
 
             self.z['emb.weight'] = F.layer_norm(self.z['emb.weight'], (args.n_embd,), weight=self.z['blocks.0.ln0.weight'], bias=self.z['blocks.0.ln0.bias'])
+
+            if os.environ.get('RWKV_DE_VERSION') == '1':
+                print('DeepEmbed version', os.environ.get('RWKV_DE_VERSION'))
+                for i in range(self.n_layer): # !!! merge emb residual !!!
+                    self.z[f'blocks.{i}.ffn.s_emb.weight'] = self.z[f'blocks.{i}.ffn.s_emb.weight'] + self.z['emb.weight'] @ self.z[f'blocks.{i}.ffn.s_emb_x.weight'].t()
+
             self.z['blocks.0.att.v0'] = torch.empty(0, device=DEVICE, dtype=DTYPE) # actually ignored
             self.z['blocks.0.att.v1'] = torch.empty(0, device=DEVICE, dtype=DTYPE) # actually ignored
             self.z['blocks.0.att.v2'] = torch.empty(0, device=DEVICE, dtype=DTYPE) # actually ignored
@@ -295,97 +301,190 @@ if os.environ.get('RWKV_V7_ON') == '1':
             else:
                 return self.forward_one(idx, state)
 
-        @MyFunction
-        def forward_one(self, idx:int, state:List[torch.Tensor]):
-            with torch.no_grad(): 
-                z = self.z
-                x = z['emb.weight'][idx]
+        if os.environ.get('RWKV_DE_VERSION') == '1':
+            @MyFunction
+            def forward_one(self, idx:int, state:List[torch.Tensor]):
+                with torch.no_grad(): 
+                    z = self.z
+                    x = z['emb.weight'][idx]
 
-                v_first = torch.empty_like(x)
-                for i in range(self.n_layer):
-                    bbb = f'blocks.{i}.'
-                    att = f'blocks.{i}.att.'
-                    ffn = f'blocks.{i}.ffn.'
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
 
-                    xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
-                        z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
-                        z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
-                        z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
-                        z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
-                        z[att+'ln_x.weight'], z[att+'ln_x.bias'])
-                    x = x + xx
+                        xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+                        xx, state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'], z[ffn+'s_emb.weight'][idx], z[ffn+'s1'], z[ffn+'s2'], z[ffn+'s0'])
+                        x = x + xx
 
-                    xx, state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
-                    x = x + xx
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, state
+        else:
+            @MyFunction
+            def forward_one(self, idx:int, state:List[torch.Tensor]):
+                with torch.no_grad(): 
+                    z = self.z
+                    x = z['emb.weight'][idx]
 
-                x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
-                x = x @ z['head.weight']
-                return x, state
-        
-        def forward_one_alt(self, x:torch.Tensor, state:List[torch.Tensor]):
-            new_state = [torch.empty_like(x) for x in state]
-            with torch.no_grad(): 
-                z = self.z
-                v_first = torch.empty_like(x)
-                for i in range(self.n_layer):
-                    bbb = f'blocks.{i}.'
-                    att = f'blocks.{i}.att.'
-                    ffn = f'blocks.{i}.ffn.'
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
 
-                    xx, new_state[i*3+0], new_state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
-                        z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
-                        z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
-                        z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
-                        z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
-                        z[att+'ln_x.weight'], z[att+'ln_x.bias'])
-                    x = x + xx
+                        xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+                        xx, state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
+                        x = x + xx
 
-                    xx, new_state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
-                    x = x + xx
-                
-                x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
-                x = x @ z['head.weight']
-                return x, new_state
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, state
 
-        @MyFunction
-        def forward_seq(self, idx:List[int], state:List[torch.Tensor], full_output:bool=False):
-            with torch.no_grad(): 
-                z = self.z
-                x = z['emb.weight'][idx]
+        if os.environ.get('RWKV_DE_VERSION') == '1':
+            def forward_one_alt(self, x:torch.Tensor, state:List[torch.Tensor]):
+                new_state = [torch.empty_like(x) for x in state]
+                with torch.no_grad(): 
+                    z = self.z
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
 
-                v_first = torch.empty_like(x)
-                for i in range(self.n_layer):
-                    bbb = f'blocks.{i}.'
-                    att = f'blocks.{i}.att.'
-                    ffn = f'blocks.{i}.ffn.'
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+                        xx, new_state[i*3+0], new_state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
 
-                    xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_seq(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
-                        z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
-                        z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
-                        z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
-                        z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
-                        z[att+'ln_x.weight'], z[att+'ln_x.bias'])
-                    x = x + xx
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
 
-                    xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+                        xx, state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'], z[ffn+'s_emb.weight'][idx], z[ffn+'s1'], z[ffn+'s2'], z[ffn+'s0'])
+                        x = x + xx
+                    
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, new_state
+        else:
+            def forward_one_alt(self, x:torch.Tensor, state:List[torch.Tensor]):
+                new_state = [torch.empty_like(x) for x in state]
+                with torch.no_grad(): 
+                    z = self.z
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
 
-                    xx, state[i*3+2] = RWKV_x070_CMix_seq(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
-                    x = x + xx
-                
-                if not full_output: x = x[-1,:]
-                x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
-                x = x @ z['head.weight']
-                return x, state
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+
+                        xx, new_state[i*3+0], new_state[i*3+1], v_first = RWKV_x070_TMix_one(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
+
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+
+                        xx, new_state[i*3+2] = RWKV_x070_CMix_one(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
+                        x = x + xx
+                    
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, new_state
+
+        if os.environ.get('RWKV_DE_VERSION') == '1':
+            @MyFunction
+            def forward_seq(self, idx:List[int], state:List[torch.Tensor], full_output:bool=False):
+                with torch.no_grad(): 
+                    z = self.z
+                    x = z['emb.weight'][idx]
+
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
+
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+
+                        xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_seq(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
+
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+
+                        xx, state[i*3+2] = RWKV_x070_CMix_seq(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'], z[ffn+'s_emb.weight'][idx], z[ffn+'s1'], z[ffn+'s2'], z[ffn+'s0'])
+                        x = x + xx
+                    
+                    if not full_output: x = x[-1,:]
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, state            
+        else:
+            @MyFunction
+            def forward_seq(self, idx:List[int], state:List[torch.Tensor], full_output:bool=False):
+                with torch.no_grad(): 
+                    z = self.z
+                    x = z['emb.weight'][idx]
+
+                    v_first = torch.empty_like(x)
+                    for i in range(self.n_layer):
+                        bbb = f'blocks.{i}.'
+                        att = f'blocks.{i}.att.'
+                        ffn = f'blocks.{i}.ffn.'
+
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln1.weight'], bias=z[bbb+'ln1.bias'])
+
+                        xx, state[i*3+0], state[i*3+1], v_first = RWKV_x070_TMix_seq(i, self.n_head, self.head_size, xx, state[i*3+0], v_first, state[i*3+1],
+                            z[att+'x_r'], z[att+'x_w'], z[att+'x_k'], z[att+'x_v'], z[att+'x_a'], z[att+'x_g'],
+                            z[att+'w0'], z[att+'w1'], z[att+'w2'], z[att+'a0'], z[att+'a1'], z[att+'a2'], z[att+'v0'], z[att+'v1'], z[att+'v2'],
+                            z[att+'g1'], z[att+'g2'], z[att+'k_k'], z[att+'k_a'], z[att+'r_k'],
+                            z[att+'receptance.weight'], z[att+'key.weight'], z[att+'value.weight'], z[att+'output.weight'],
+                            z[att+'ln_x.weight'], z[att+'ln_x.bias'])
+                        x = x + xx
+
+                        xx = F.layer_norm(x, (self.n_embd,), weight=z[bbb+'ln2.weight'], bias=z[bbb+'ln2.bias'])
+
+                        xx, state[i*3+2] = RWKV_x070_CMix_seq(xx, state[i*3+2], z[ffn+'x_k'], z[ffn+'key.weight'], z[ffn+'value.weight'])
+                        x = x + xx
+                    
+                    if not full_output: x = x[-1,:]
+                    x = F.layer_norm(x, (self.n_embd,), weight=z['ln_out.weight'], bias=z['ln_out.bias'])
+                    x = x @ z['head.weight']
+                    return x, state
 
     ########################################################################################################
 
@@ -474,19 +573,39 @@ if os.environ.get('RWKV_V7_ON') == '1':
 
     ########################################################################################################
 
-    @MyStatic
-    def RWKV_x070_CMix_one(x, x_prev, x_k, K_, V_):
-        xx = x_prev - x
-        k = x + xx * x_k
-        k = torch.relu(k @ K_) ** 2
-        return k @ V_, x
+    if os.environ.get('RWKV_DE_VERSION') == '1':
+        @MyStatic
+        def RWKV_x070_CMix_one(x, x_prev, x_k, K_, V_, semb_, s1_, s2_, s0_):
+            xx = x_prev - x
+            k = x + xx * x_k
+            k = torch.relu(k @ K_) ** 2
+            ss = (x @ s1_) @ semb_.view(32,32)
+            k = k * ((ss @ s2_) + s0_)
+            return k @ V_, x
 
-    @MyStatic
-    def RWKV_x070_CMix_seq(x, x_prev, x_k, K_, V_):
-        xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
-        k = x + xx * x_k
-        k = torch.relu(k @ K_) ** 2
-        return k @ V_, x[-1,:]
+        @MyStatic
+        def RWKV_x070_CMix_seq(x, x_prev, x_k, K_, V_, semb_, s1_, s2_, s0_):
+            T,C = x.shape
+            xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
+            k = x + xx * x_k
+            k = torch.relu(k @ K_) ** 2    
+            ss = (x @ s1_).view(T,1,32) @ semb_.view(T,32,32)
+            k = k * ((ss.view(T,32) @ s2_) + s0_)
+            return k @ V_, x[-1,:]
+    else:
+        @MyStatic
+        def RWKV_x070_CMix_one(x, x_prev, x_k, K_, V_):
+            xx = x_prev - x
+            k = x + xx * x_k
+            k = torch.relu(k @ K_) ** 2
+            return k @ V_, x
+
+        @MyStatic
+        def RWKV_x070_CMix_seq(x, x_prev, x_k, K_, V_):
+            xx = torch.cat((x_prev.unsqueeze(0), x[:-1,:])) - x
+            k = x + xx * x_k
+            k = torch.relu(k @ K_) ** 2
+            return k @ V_, x[-1,:]
 
 ########################################################################################################
 
