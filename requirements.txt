@@ -1,2 +1,7 @@
+# V1 requirements
 tokenizers>=0.13.2
 prompt_toolkit
+
+# Additional V2 requirements
+numpy
+torch
