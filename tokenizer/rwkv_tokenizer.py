@@ -7,7 +7,7 @@ import os, sys, time, random
 print('''
 #######################################################################################################################
 
-This tokenizer is not used in any RWKV models yet. I plan to use it for the future multilang RWKV models.
+This tokenizer is used in all RWKV Gx and RWKV World models.
 
 Benefits:
 
