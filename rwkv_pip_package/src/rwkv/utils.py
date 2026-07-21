@@ -28,7 +28,11 @@ class PIPELINE():
         elif WORD_NAME == 'rwkv_vocab_v20230424':
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from rwkv_tokenizer import TRIE_TOKENIZER
-            self.tokenizer = TRIE_TOKENIZER(os.path.dirname(os.path.abspath(__file__)) + '/rwkv_vocab_v20230424.txt')        
+            self.tokenizer = TRIE_TOKENIZER(os.path.dirname(os.path.abspath(__file__)) + '/rwkv_vocab_v20230424.txt')
+        elif WORD_NAME.endswith(".txt") or "rwkv_vocab_v20230424" in WORD_NAME:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from rwkv_tokenizer import TRIE_TOKENIZER
+            self.tokenizer = TRIE_TOKENIZER(WORD_NAME)
         else:
             from tokenizers import Tokenizer
             self.tokenizer = Tokenizer.from_file(WORD_NAME)
