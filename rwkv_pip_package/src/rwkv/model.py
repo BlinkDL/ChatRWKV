@@ -12,6 +12,21 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 current_path = os.path.dirname(os.path.abspath(__file__))
 
+def check_token_ids(tokens, vocab_size: int):
+    # Validate token IDs on the Python side, BEFORE any CUDA op is dispatched.
+    # An out-of-range ID reaching the embedding lookup on CUDA triggers a
+    # device-side assert that poisons the CUDA context (unrecoverable without
+    # restarting the process). See https://github.com/BlinkDL/RWKV-LM/issues/346
+    if len(tokens) == 0:
+        raise ValueError("Token sequence must not be empty.")
+    lo, hi = min(tokens), max(tokens)
+    if lo < 0 or hi >= vocab_size:
+        bad = lo if lo < 0 else hi
+        raise ValueError(
+            f"Token ID {bad} is outside the model vocabulary range [0, {vocab_size - 1}]. "
+            "This usually means the tokenizer does not match the checkpoint "
+            "(e.g. World tokenizer with a Pile model).")
+
 ########################################################################################################
 
 if os.environ.get('RWKV_JIT_ON') != '0':
@@ -290,6 +305,7 @@ if os.environ.get('RWKV_V7_ON') == '1':
             return state
 
         def forward(self, idx, state, full_output=False):
+            check_token_ids(idx if type(idx) is list else [idx], self.args.vocab_size)
             if state == None:
                 state = self.generate_zero_state()
 
@@ -1441,6 +1457,7 @@ class RWKV(MyModule):
     ########################################################################################################
 
     def forward(self, tokens, state, full_output=False):
+        check_token_ids(tokens if type(tokens) is list else [tokens], self.w['emb.weight'].shape[0])
         with torch.no_grad():
             w = self.w
             args = self.args
