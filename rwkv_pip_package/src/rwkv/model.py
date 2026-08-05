@@ -1338,6 +1338,53 @@ class RWKV(MyModule):
         out = matmul(out, ow, omx, orx, omy, ory)
 
         return x + out, xx[-1,:], s
+    
+    @MyFunction
+    def att_seq_v5_2_torch_parallel(self, x, sx, s, ln_w, ln_b, lx_w, lx_b, k_mix, v_mix, r_mix, g_mix, t_decay, t_first, kw, vw, rw, gw, ow, kmx, krx, kmy, kry, vmx, vrx, vmy, vry, rmx, rrx, rmy, rry, gmx, grx, gmy, gry, omx, orx, omy, ory):
+        xx = F.layer_norm(x, (x.shape[-1],), weight=ln_w, bias=ln_b)
+        sx = torch.cat((sx.unsqueeze(0), xx[:-1,:]))
+        kx = xx * k_mix + sx * (1 - k_mix)
+        vx = xx * v_mix + sx * (1 - v_mix)
+        rx = xx * r_mix + sx * (1 - r_mix)
+        gx = xx * g_mix + sx * (1 - g_mix)
+
+        H = t_decay.shape[0]
+        S = x.shape[-1] // H
+        T = x.shape[0]
+
+        r = matmul(rx, rw, rmx, rrx, rmy, rry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        k = matmul(kx, kw, kmx, krx, kmy, kry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1).transpose(-2, -1)
+        v = matmul(vx, vw, vmx, vrx, vmy, vry, output_dtype=torch.float32).view(T, H, S).transpose(0, 1)
+        g = F.silu(matmul(gx, gw, gmx, grx, gmy, gry))
+
+        kv = matmul(k.transpose(-2, -1).unsqueeze(3), v.unsqueeze(2), output_dtype=torch.float32) # [H, T, S, S]
+        w = t_decay.reshape(H, S, 1) # [H, S, 1]
+        ws = w.pow(T).reshape(H, S, 1)
+        ind = torch.arange(T - 1, -1, -1, device=w.device).unsqueeze(0).unsqueeze(0) # [1, 1, T]
+        w = w.repeat(1, 1, T).pow(ind) # [H, S, T]
+        wk = w.reshape(H, S, T) # [H, S, T]
+        # wb = wk.transpose(-2, -1).flip(1).unsqueeze(3) # [H, T, S, 1]
+        u = t_first.reshape(H, S, 1)
+        w = torch.cat([w[:, :, 1:], u], dim=2) # [H, S, T]
+        w = F.pad(w, (0, T)) # [H, S, 2T]
+        w = torch.tile(w, [T]) # [H, S, 2T * T]
+        w = w[:, :, :-T].reshape(H, S, T, 2 * T - 1)
+        w = w[:, :, :, T-1:].unsqueeze(2).repeat(1, 1, S, 1, 1).reshape(-1, T, T).transpose(1, 2)
+        
+        kv = kv.transpose(1, 2).transpose(2, 3).reshape(-1, 1, T)
+        out = kv @ w # [-1, 1, T]
+        out = out.squeeze().transpose(0, 1).reshape(T, H, S, S)
+        out = r.transpose(0, 1).unsqueeze(2) @ out # [T, H, 1, S]
+        out = out.squeeze()
+        
+        s = ws * s + (k * wk) @ v
+
+        out = out.reshape(T, H*S)
+        out = F.group_norm(out, num_groups=H, weight=lx_w, bias=lx_b)
+        out = out.to(dtype=x.dtype) * g
+        out = matmul(out, ow, omx, orx, omy, ory)
+
+        return x + out, xx[-1,:], s
 
     ########################################################################################################
 
