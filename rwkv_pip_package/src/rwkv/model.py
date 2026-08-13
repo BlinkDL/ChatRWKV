@@ -753,11 +753,14 @@ class RWKV(MyModule):
 
             if not ALREADY_CONVERTED:
                 try: # precompute embedding
+                    w['emb.weight_non_norm'] = w['emb.weight']
                     w['emb.weight'] = F.layer_norm(w['emb.weight'], (args.n_embd,), weight=w['blocks.0.ln0.weight'], bias=w['blocks.0.ln0.bias'])
+                    
                 except:
+                    w['emb.weight_non_norm'] = w['emb.weight'].float()
                     w['emb.weight'] = F.layer_norm(w['emb.weight'].float(), (args.n_embd,), weight=w['blocks.0.ln0.weight'].float(), bias=w['blocks.0.ln0.bias'].float())
-                del w['blocks.0.ln0.weight']
-                del w['blocks.0.ln0.bias']
+                # del w['blocks.0.ln0.weight']
+                # del w['blocks.0.ln0.bias']
 
             print_need_newline = False
 
@@ -1440,7 +1443,13 @@ class RWKV(MyModule):
 
     ########################################################################################################
 
-    def forward(self, tokens, state, full_output=False):
+    def embed(self, tokens):
+        w = self.w
+        seq_mode = len(tokens) > 1
+        
+        return w['emb.weight_non_norm'][tokens if seq_mode else tokens[0]]
+    
+    def forward(self, tokens, state, embed=None, full_output=False):
         with torch.no_grad():
             w = self.w
             args = self.args
@@ -1469,10 +1478,16 @@ class RWKV(MyModule):
                         else:
                             state[i*3+1] = torch.zeros((args.n_head, args.n_att//args.n_head, args.n_att//args.n_head), dtype=torch.float, requires_grad=False, device=dev).contiguous()
                         state[i*3+2] = torch.zeros(args.n_embd, dtype=atype, requires_grad=False, device=dev).contiguous()
+            
+            
 
-            seq_mode = len(tokens) > 1
-
-            x = w['emb.weight'][tokens if seq_mode else tokens[0]]
+            if(embed != None):
+                seq_mode = len(embed) > 1
+                x = embed
+                x = F.layer_norm(x, (args.n_embd,), weight=w['blocks.0.ln0.weight'], bias=w['blocks.0.ln0.bias'])
+            else:
+                seq_mode = len(tokens) > 1
+                x = w['emb.weight'][tokens if seq_mode else tokens[0]]
 
             for i in range(args.n_layer):
                 bbb = f'blocks.{i}.'
