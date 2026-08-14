@@ -140,4 +140,4 @@ QQ群 553456870（加入时请简单自我介绍）。有研发能力的朋友�
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=BlinkDL/ChatRWKV&type=Date)](https://star-history.com/#BlinkDL/ChatRWKV&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=BlinkDL/ChatRWKV&type=Date)](https://star-history.dera.page/#BlinkDL/ChatRWKV&Date)
