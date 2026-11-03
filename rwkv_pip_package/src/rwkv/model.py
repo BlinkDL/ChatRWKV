@@ -182,9 +182,6 @@ if os.environ.get('RWKV_V7_ON') == '1':
     # torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = True
     torch._C._jit_set_autocast_mode(False)
 
-    MyModule = torch.jit.ScriptModule
-    MyFunction = torch.jit.script_method
-    MyStatic = torch.jit.script
     from typing import List
 
     DTYPE = None
